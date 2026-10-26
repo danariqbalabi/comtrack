@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 from .collectors import ou_festival
 from .collectors.public import Batch, collect_html, collect_rss
+from .collectors.providers import ProviderUnavailable, collect_discovery, collect_instagram
 from .collectors.http import FetchError
 from .database import Database
 from .job_queue import JobQueue, LostLeaseError, SourceDisabledError
@@ -29,11 +30,12 @@ def collect_ou(source, client=None):
     return ou_festival.collect(client)
 
 
-ADAPTERS = {ou_festival.ADAPTER: collect_ou, "public_html": collect_html, "rss": collect_rss}
+ADAPTERS = {ou_festival.ADAPTER: collect_ou, "public_html": collect_html, "rss": collect_rss,
+            "instagram_provider": collect_instagram, "brave_discovery": collect_discovery}
 
 
 def safe_error(error):
-    if isinstance(error, (FetchError, ou_festival.ExtractionError, SourceNotConnectedError, SourceDisabledError)):
+    if isinstance(error, (FetchError, ou_festival.ExtractionError, SourceNotConnectedError, SourceDisabledError, ProviderUnavailable)):
         return str(error)[:500]
     if type(error) is ValueError:
         return str(error)[:500]
@@ -78,6 +80,8 @@ def execute_job(queue: JobQueue, job_id: int, token: str, *, client=None, adapte
                 if lost.is_set():
                     raise LostLeaseError("Worker kehilangan hak pemrosesan.")
                 batch = extracted if isinstance(extracted, Batch) else Batch([extracted], inspected=1)
+                if batch.candidates:
+                    queue.record_candidates(job_id, token, source, batch.candidates)
                 results = []
                 for item in batch.items:
                     if shutdown.is_set():
@@ -104,7 +108,7 @@ def execute_job(queue: JobQueue, job_id: int, token: str, *, client=None, adapte
                 queue.finish_source(job_id,token,source,error=safe_error(error),skipped=True)
             except Exception as error:
                 errors.append(error)
-                queue.finish_source(job_id,token,source,error=safe_error(error),disconnected=isinstance(error,SourceNotConnectedError))
+                queue.finish_source(job_id,token,source,error=safe_error(error),disconnected=isinstance(error,(SourceNotConnectedError,ProviderUnavailable)))
         summary = queue.finish(job_id,token,cancelled=shutdown.is_set())
     except KeyboardInterrupt:
         queue.finish(job_id,token,cancelled=True)

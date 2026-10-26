@@ -72,7 +72,13 @@ class JobQueue:
                     raise CollectionBusyError("Masih ada job aktif. Tunggu prosesnya selesai; jangan jalankan pengambilan bersamaan.")
                 return active["id"], False
             if source_ids is None:
-                sources = conn.execute("SELECT * FROM sources WHERE enabled=1 ORDER BY id").fetchall()
+                discovery = json.loads(conn.execute("SELECT data_json FROM preferences WHERE singleton=1").fetchone()[0]).get("discovery_enabled", False)
+                if discovery:
+                    stamp = utc_now()
+                    conn.execute("""INSERT INTO sources(name,kind,url,adapter,created_at,updated_at)
+                        VALUES ('Discovery web','website','https://api.search.brave.com/','brave_discovery',?,?)
+                        ON CONFLICT(kind,url) DO NOTHING""", (stamp, stamp))
+                sources = conn.execute("SELECT * FROM sources WHERE enabled=1 AND (? OR adapter!='brave_discovery') ORDER BY id", (discovery,)).fetchall()
             else:
                 identifiers = list(dict.fromkeys(source_ids))
                 if not identifiers or len(identifiers) > 30 or any(type(value) is not int or value < 1 for value in identifiers):
@@ -205,3 +211,13 @@ class JobQueue:
         with self.database.connection() as conn:
             row=conn.execute("SELECT id FROM collection_jobs ORDER BY id DESC LIMIT 1").fetchone()
         return self.get(row["id"]) if row else None
+
+    def record_candidates(self, job_id, token, source, candidates):
+        with self.database.transaction() as conn:
+            self.source_guard(conn, job_id, token, source)
+            for item in candidates:
+                stamp = utc_now()
+                conn.execute("""INSERT INTO discovery_candidates(url,title,status,reason,first_seen_at,last_seen_at,job_id)
+                    VALUES (?,?,?,?,?,?,?) ON CONFLICT(url) DO UPDATE SET title=excluded.title,status=excluded.status,
+                    reason=excluded.reason,last_seen_at=excluded.last_seen_at,job_id=excluded.job_id""",
+                    (item['url'],item['title'],item['status'],item['reason'],stamp,stamp,job_id))

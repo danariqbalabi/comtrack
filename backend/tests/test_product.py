@@ -2,14 +2,14 @@ import unittest
 from backend.app.feed_api import router as feed_router
 from backend.app.settings_api import router as settings_router
 from backend.app.jobs_api import router as jobs_router
-from backend.tests.test_jobs import QueueTests, ApiTests
+from backend.tests import test_jobs as jobs
 
 
 class ProductTests(unittest.TestCase):
-    setUp = QueueTests.setUp
-    tearDown = QueueTests.tearDown
-    run_job = QueueTests.run_job
-    request = ApiTests.request
+    setUp = jobs.QueueTests.setUp
+    tearDown = jobs.QueueTests.tearDown
+    run_job = jobs.QueueTests.run_job
+    request = jobs.ApiTests.request
     routers = (feed_router, settings_router, jobs_router)
     protect = True
     headers = {"x-lomba-radar": "1"}

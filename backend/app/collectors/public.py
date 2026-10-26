@@ -17,6 +17,7 @@ class Batch:
     items: list[ExtractedCompetition] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     inspected: int = 0
+    candidates: list[dict] = field(default_factory=list)
 
 
 def from_text(title, raw, url):

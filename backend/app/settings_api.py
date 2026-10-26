@@ -19,6 +19,22 @@ def source_catalog():
     return {"items": catalog()}
 
 
+@router.get("/integrations")
+def integrations():
+    import shutil
+    from .config import get_settings
+    settings = get_settings()
+    return {"instagram": settings.instagram_provider_enabled and bool(settings.apify_token.get_secret_value()),
+            "discovery": settings.discovery_provider_enabled and bool(settings.brave_api_key.get_secret_value()),
+            "ocr": settings.ocr_enabled and shutil.which(settings.tesseract_command) is not None}
+
+
+@router.get("/discovery-candidates")
+def candidates(repository: Repository = Depends(repository_for)):
+    with repository.database.connection() as conn:
+        return {"items": [dict(row) for row in conn.execute("SELECT * FROM discovery_candidates ORDER BY last_seen_at DESC,id DESC LIMIT 100")]}
+
+
 class SourceInput(Model):
     name: str = Field(min_length=1, max_length=200)
     url: str = Field(min_length=1, max_length=2000)
