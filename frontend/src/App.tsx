@@ -1,9 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, dateTime, deadline, safeLink, type Competition, type Feed, type Job } from './api'
+import Detail from './Detail'
 
 const statuses: Record<string, string> = { queued: 'Menunggu worker', running: 'Sedang mencari', succeeded: 'Pencarian selesai', partial: 'Sebagian sumber berhasil', failed: 'Pencarian gagal', cancelled: 'Dibatalkan', open: 'Pendaftaran terbuka', closed: 'Pendaftaran tutup', upcoming: 'Segera dibuka', unknown: 'Tanggal perlu dicek' }
 
 export default function App() {
+  const [route, setRoute] = useState(location.hash)
+  useEffect(() => { const change = () => { setRoute(location.hash); window.scrollTo(0, 0) }; addEventListener('hashchange', change); return () => removeEventListener('hashchange', change) }, [])
+  const match = route.match(/^#competition\/(\d+)$/)
+  if (match) return <div className="shell"><header><a className="brand" href="#">◎ Lomba Radar</a><a href="#">← Feed lomba</a></header><main><Detail id={Number(match[1])} /></main></div>
+  return <FeedPage />
+}
+
+function FeedPage() {
   const [category, setCategory] = useState(''), [query, setQuery] = useState(''), [sort, setSort] = useState('newest')
   const [page, setPage] = useState(0), [feed, setFeed] = useState<Feed | null>(null), [job, setJob] = useState<Job | null>(null)
   const [loading, setLoading] = useState(true), [sending, setSending] = useState(false), [error, setError] = useState('')

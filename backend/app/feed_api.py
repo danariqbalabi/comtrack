@@ -2,6 +2,7 @@
 from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from .quality.service import visible_competitions
+from .quality.relevance import evaluate
 from .repository import Repository, NotFoundError
 
 router = APIRouter(prefix="/api", tags=["competitions"])
@@ -25,3 +26,14 @@ def feed(response: Response, category: Literal["hackathon", "BCC", "BPC"] | None
             return (min(dates) if dates else "9999-12-31", -row.id)
         rows.sort(key=deadline)
     return {"items": rows[offset:offset + limit], "total": len(rows), "offset": offset, "limit": limit}
+
+
+@router.get("/competitions/{competition_id}")
+def detail(competition_id: int, response: Response, repository: Repository = Depends(repository_for)):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        row = repository.get_competition(competition_id)
+    except NotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from None
+    row = row.model_copy(update={"data": evaluate(row.data, repository.get_preferences())})
+    return {"competition": row, "evidence": repository.list_evidence(competition_id), "history": repository.list_history(competition_id)}
