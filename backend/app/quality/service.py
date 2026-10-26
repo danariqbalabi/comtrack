@@ -11,7 +11,7 @@ from .relevance import evaluate
 
 
 def ingest(repository: Repository, data: CompetitionData, evidence: EvidenceData, *,
-           adapter_key: str | None = None, now: datetime | None = None):
+           adapter_key: str | None = None, now: datetime | None = None, guard=None):
     now = now or datetime.now(timezone.utc)
     data = prepare(data)
     if canonical_url(data.source_url) != canonical_url(evidence.url):
@@ -20,6 +20,8 @@ def ingest(repository: Repository, data: CompetitionData, evidence: EvidenceData
     evidence = evidence.model_copy(update={"field_values": {**evidence.field_values, "_observation": snapshot}})
     key = adapter_key or storage_key(data)
     with repository.database.transaction() as conn:
+        if guard is not None:
+            guard(conn)
         preferences = Preferences.model_validate_json(conn.execute("SELECT data_json FROM preferences WHERE singleton = 1").fetchone()[0])
         row = conn.execute("SELECT * FROM competitions WHERE dedup_key = ?", (key,)).fetchone()
         if row:

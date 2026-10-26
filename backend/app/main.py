@@ -8,6 +8,7 @@ from starlette.concurrency import run_in_threadpool
 
 from .config import Settings, get_settings
 from .database import Database, MigrationError
+from .jobs_api import router as jobs_router
 
 logger = logging.getLogger(__name__)
 
@@ -26,10 +27,11 @@ def get_database(request: Request) -> Database:
 
 app = FastAPI(
     title=get_settings().app_name,
-    description="API pribadi Lomba Radar. Tahap 4: kualitas data, relevansi, dan deduplikasi.",
-    version="0.4.0",
+    description="API pribadi Lomba Radar. Tahap 5: job manual dan worker terpisah.",
+    version="0.5.0",
     lifespan=lifespan,
 )
+app.include_router(jobs_router)
 
 
 class HealthResponse(BaseModel):

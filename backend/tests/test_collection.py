@@ -120,7 +120,7 @@ class CollectionTests(unittest.TestCase):
         self.assertEqual(source.status, "failed")
         self.assertEqual(source.last_success_at, success_at)
         self.assertEqual(self.repository.get_job(2)["status"], "failed")
-        self.assertIn("403", self.repository.list_logs(2)[-1]["message"])
+        self.assertTrue(any("403" in log["message"] for log in self.repository.list_logs(2)))
 
     def test_changed_schema_preserves_existing_data_and_records_failure(self):
         first = run_collection(self.repository, self.client)
