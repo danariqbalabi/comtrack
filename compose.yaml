@@ -1,0 +1,33 @@
+services:
+  api:
+    build: .
+    image: comtrack:local
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      APP_ENV: production
+      DATABASE_PATH: /app/data/lomba-radar.db
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - radar-data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "scripts/healthcheck.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+  worker:
+    image: comtrack:local
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_PATH: /app/data/lomba-radar.db
+    command: ["python", "-m", "backend.app.worker"]
+    volumes:
+      - radar-data:/app/data
+    depends_on:
+      api:
+        condition: service_healthy
+volumes:
+  radar-data:

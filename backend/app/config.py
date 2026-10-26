@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     ocr_enabled: bool = False
     tesseract_command: str = "tesseract"
     ocr_language: str = Field(default="eng", pattern=r"^[A-Za-z_+]{1,30}$")
+    access_username: str = ""
+    access_password: SecretStr = SecretStr("")
     api_allowed_origins: str = "http://127.0.0.1:5173,http://localhost:5173,http://127.0.0.1:8000,http://localhost:8000"
 
     @property
