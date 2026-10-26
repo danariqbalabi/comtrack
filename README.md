@@ -23,7 +23,7 @@ Prasyarat: Python 3.11+ dan Node.js 22.12+ (pengembangan memakai Python 3.13 dan
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
-Copy-Item .env.example .env
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
 cd frontend
 npm.cmd ci
 npm.cmd run build
@@ -164,5 +164,18 @@ npm.cmd run build
 ```
 
 Tes memakai database sementara dan fixture eksplisit, mencakup kualitas data, deduplikasi, riwayat, migrasi/rollback, privasi jaringan, antrean/klaim paralel, heartbeat/crash, penulis lama, API feed/detail/pengaturan, provider opt-in, OCR cache, dan akses pribadi. Provider berbayar tidak dipanggil oleh tes. Integrasi live Apify/Brave tetap memerlukan credential milik pengguna; tes kontrak memakai mock respons, bukan bukti layanan live sudah terhubung.
+
+**Verifikasi browser langsung 26 Oktober 2026:** Chrome desktop 1440 px dan mobile 390 px berhasil menjalankan setup sumber → pencarian OU Festival nyata → worker → feed → detail/bukti. Pencarian nama dan filter kategori bekerja, preferensi bertahan setelah reload, shell offline terbuka, tidak ada overflow horizontal mobile atau error JavaScript, dan cache service worker tidak berisi URL API. Screenshot/log tersimpan hanya di folder lokal `data/` yang diabaikan Git. Collector tambahan Sorota juga berhasil membaca satu kompetisi dari jaringan; teks petunjuk tanpa tanggal tidak dipakai sebagai fase deadline.
+
+Pemeriksaan akhir: **128 tes backend lulus**, build TypeScript/Vite berhasil, `pip check` bersih. Backup database lokal berhasil dibaca dengan `PRAGMA integrity_check = ok`, satu lomba nyata dan schema `003` tetap utuh. Build Docker dan koneksi live provider berbayar belum diverifikasi.
+
+Untuk mengulang uji browser opsional (mengakses OU Festival nyata, bukan provider berbayar):
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install --target data/qa-tools -r backend/requirements-dev.txt
+.\.venv\Scripts\python.exe -m scripts.browser_smoke
+```
+
+Gunakan Chrome yang terpasang; `BROWSER_EXECUTABLE` bisa menunjuk executable browser lain. Pada OS tanpa Chrome/Chromium sistem, instal browser Playwright sendiri terlebih dahulu. Skrip membuat database sementara, credential acak khusus pengujian, API lokal dan worker; semua proses miliknya dihentikan sesudah tes, tanpa mengubah database/preferensi utama.
 
 Stack: React, Vite, TypeScript, Tailwind CSS, FastAPI, SQLite, Beautiful Soup. Dependency runtime backend tetap pada `backend/requirements.txt`; tidak ada Redis/Celery atau layanan database terpisah yang wajib dipasang.

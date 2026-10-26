@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from urllib.parse import urljoin, urlsplit
 from bs4 import BeautifulSoup
 from ..models import CompetitionData, Money
-from ..quality.dates import parse_timeline
+from ..quality.dates import MONTHS, parse_timeline
 from .http import PublicClient, FetchError
 from .ou_festival import ExtractedCompetition
 
@@ -36,14 +36,19 @@ def from_text(title, raw, url):
         if re.search(r"pendaftaran|registrasi|registration|submission|pengumpulan|deadline|final", line, re.I):
             kind = "registration" if re.search(r"pendaftaran|registrasi|registration", line, re.I) else "submission" if re.search(r"submission|pengumpulan", line, re.I) else "final" if re.search(r"\bfinal\b", line, re.I) else "other"
             context = line if re.search(r"\b20\d{2}\b", line) else " ".join(lines[index:index + 3])
-            timeline.append(parse_timeline(context[:1000], kind=kind))
+            month_pattern = r"\b(?:" + "|".join(MONTHS) + r")\b"
+            date_hint = re.search(month_pattern, context, re.I) or re.search(r"\b20\d{2}-\d{2}-\d{2}\b|\b\d{1,2}/\d{1,2}/\d{4}\b", context)
+            if date_hint or re.search(r"\b(TBA|menyusul)\b", line, re.I):
+                if kind == "registration" and re.search(r"dibuka|opens?|starts?", line, re.I) and not re.search(r"ditutup|closed?|hingga|sampai", line, re.I):
+                    kind = "other"  # An opening date is not the registration deadline.
+                timeline.append(parse_timeline(context[:1000], kind=kind, label=line[:150]))
         if re.search(r"\b(biaya|gratis|free|investment|registration fee)\b", line, re.I):
             fees.append(Money(raw_text=line[:1000]))
     years = re.findall(r"\b20\d{2}\b", title)
     eligibility = next((line for line in lines if re.search(r"mahasiswa|undergraduate|student|peserta|eligibility", line, re.I)), None)
     data = CompetitionData(name=title, category=category, edition=years[0] if len(set(years)) == 1 else None,
         summary=raw[:700] or None, eligibility=eligibility, timeline=timeline[:20], fees=fees[:10], source_url=url,
-        scope="indonesia" if re.search(r"\b(indonesia|nasional)\b", raw, re.I) else "unknown",
+        scope="international" if re.search(r"\b(international|internasional)\b", title, re.I) else "indonesia" if re.search(r"\b(indonesia|nasional)\b", raw, re.I) else "unknown",
         content_kind="competition" if re.search(r"lomba|kompetisi|competition|hackathon", title, re.I) else "unknown",
         warnings=["Ekstraksi konservatif dari teks publik; periksa ketentuan dan poster pada sumber asli."])
     digest = hashlib.sha256(raw.encode()).hexdigest()

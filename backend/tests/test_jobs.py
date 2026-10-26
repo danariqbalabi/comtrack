@@ -73,6 +73,15 @@ class QueueTests(unittest.TestCase):
         self.assertEqual(len(self.repo.list_competitions()), 1)
         self.assertEqual(next(item for item in self.repo.list_sources() if item.id == broken.id).status, "failed")
 
+    def test_partially_failed_batch_keeps_saved_results_and_reports_partial_job(self):
+        from backend.app.collectors.public import Batch
+        self.adapter.return_value = Batch([extract(fixture_page())], errors=['One article failed'], inspected=2)
+        job_id, _ = self.queue.enqueue()
+        summary = self.run_job()
+        self.assertEqual(self.queue.get(job_id)['status'], 'partial')
+        self.assertEqual(len(summary['results'][0]['competitions']), 1)
+        self.assertEqual(len(self.repo.list_competitions()), 1)
+
     def test_unknown_instagram_is_reported_not_connected(self):
         source = self.extra_source(kind="instagram", url="https://www.instagram.com/fixture/")
         job_id, _ = self.queue.enqueue([source.id])

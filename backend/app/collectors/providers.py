@@ -89,6 +89,10 @@ def collect_instagram(source, client=None):
         if not isinstance(post, dict) or post.get("error"):
             batch.errors.append("Postingan tidak dapat dibaca provider."); continue
         url = post.get("url", "")
+        try:
+            public_url(url, frozenset({"www.instagram.com", "instagram.com"}))
+        except (FetchError, ValueError, TypeError):
+            batch.errors.append("URL postingan provider tidak valid."); continue
         parsed = urlsplit(url)
         if parsed.hostname not in ("www.instagram.com", "instagram.com") or not re.match(r"^/(p|reel)/[\w-]+/?$", parsed.path):
             batch.errors.append("Provider tidak memberikan URL postingan asli yang valid."); continue

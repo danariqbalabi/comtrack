@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, dateTime, deadline, safeLink, type Competition, type Feed, type Job } from './api'
 import Detail from './Detail'
 import Settings from './Settings'
@@ -15,17 +15,20 @@ export default function App() {
 }
 
 function FeedPage() {
+  const requestSequence = useRef(0)
   const [category, setCategory] = useState(''), [query, setQuery] = useState(''), [sort, setSort] = useState('newest')
   const [page, setPage] = useState(0), [feed, setFeed] = useState<Feed | null>(null), [job, setJob] = useState<Job | null>(null)
   const [loading, setLoading] = useState(true), [sending, setSending] = useState(false), [error, setError] = useState('')
   const load = useCallback(async () => {
+    const sequence = ++requestSequence.current
     setLoading(true)
     try {
       const params = new URLSearchParams({ q: query, sort, offset: String(page * 30) })
       if (category) params.set('category', category)
-      setFeed(await api<Feed>(`/competitions?${params}`)); setError('')
-    } catch (err) { setError(err instanceof Error ? err.message : 'Backend belum terhubung.') }
-    finally { setLoading(false) }
+      const result = await api<Feed>(`/competitions?${params}`)
+      if (sequence === requestSequence.current) { setFeed(result); setError('') }
+    } catch (err) { if (sequence === requestSequence.current) setError(err instanceof Error ? err.message : 'Backend belum terhubung.') }
+    finally { if (sequence === requestSequence.current) setLoading(false) }
   }, [query, category, sort, page])
   useEffect(() => { const timer = setTimeout(() => void load(), 250); return () => clearTimeout(timer) }, [load])
   useEffect(() => { api<{ job: Job | null }>('/jobs/latest').then(result => setJob(result.job)).catch(() => {}) }, [])

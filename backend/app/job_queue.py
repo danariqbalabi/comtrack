@@ -161,7 +161,10 @@ class JobQueue:
                 conn.execute("""UPDATE sources SET status=?,last_checked_at=?,updated_at=?,last_error=?,
                     last_success_at=CASE WHEN ? IS NULL THEN ? ELSE last_success_at END WHERE id=?""",
                     (source_status,utc_now(),utc_now(),error,error,utc_now(),current["source_id"]))
-            self._log(conn,job_id,error or "Sumber berhasil diproses dan disimpan.",
+            message = "Sumber berhasil diproses dan disimpan."
+            if result is not None and result.get("competitions") == []:
+                message = "Sumber dibaca; tidak ada kandidat lomba untuk disimpan."
+            self._log(conn,job_id,error or message,
                       level="warning" if skipped else "error" if error else "info",source=current,details=result)
 
     def finish(self, job_id, token, *, cancelled=False):
@@ -172,17 +175,18 @@ class JobQueue:
                     WHERE job_id=? AND status IN ('pending','running')""", (utc_now(),job_id))
             rows=conn.execute("SELECT * FROM collection_job_sources WHERE job_id=?",(job_id,)).fetchall()
             counts={state:sum(row["status"]==state for row in rows) for state in ("succeeded","failed","skipped","pending","running")}
+            partial_results = any(row['status'] == 'failed' and json.loads(row['result_json']).get('competitions') for row in rows)
             if cancelled:
                 status="cancelled"
             elif counts["pending"] or counts["running"]:
                 raise ValueError("Masih ada sumber yang belum selesai.")
             else:
-                if counts["succeeded"]:
+                if counts["succeeded"] or partial_results:
                     status="partial" if counts["failed"] or counts["skipped"] else "succeeded"
                 else:
                     status="failed" if counts["failed"] or not rows else "cancelled"
             summary={"sources_ok":counts["succeeded"],"sources_failed":counts["failed"],"sources_skipped":counts["skipped"],
-                     "results":[json.loads(row["result_json"]) for row in rows if row["status"]=="succeeded"]}
+                     "results":[json.loads(row["result_json"]) for row in rows if row["status"]=="succeeded" or (row['status']=='failed' and json.loads(row['result_json']).get('competitions'))]}
             if not rows:
                 summary["error"]="Job tidak memiliki snapshot sumber; jalankan permintaan baru."
             conn.execute("""UPDATE collection_jobs SET status=?,summary_json=?,finished_at=?,worker_token=NULL,

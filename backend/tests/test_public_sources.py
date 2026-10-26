@@ -47,3 +47,13 @@ class PublicSourcesTests(unittest.TestCase):
         self.assertIsNone(from_text('Lomba puisi', 'Untuk mahasiswa Indonesia', 'https://example.com/a'))
         item = from_text('Festival BPC dan BCC', 'Kompetisi Indonesia', 'https://example.com/a')
         self.assertEqual(item.data.category, 'uncertain')
+
+    def test_international_title_not_misclassified_as_indonesia(self):
+        item = from_text('International Business Plan Competition 2030', 'Open to mahasiswa Indonesia', 'https://example.com/a')
+        self.assertEqual(item.data.scope, 'international')
+
+    def test_navigation_and_fee_mentions_are_not_undated_registration_phases(self):
+        item = from_text('Business Plan Competition 2030', 'Pendaftaran belum dibuka\nHadiah menarik\nInfo lain\nPendaftaran Dibuka\n3 Agustus 2030\nPendaftaran Ditutup\n14 September 2030\nGrand Final\n25 September 2030\nBiaya pendaftaran\nRp50.000\nInformasi lain', 'https://example.com/a')
+        registrations = [entry for entry in item.data.timeline if entry.kind == 'registration']
+        self.assertEqual(len(registrations), 1)
+        self.assertEqual(str(registrations[0].date), '2030-09-14')
