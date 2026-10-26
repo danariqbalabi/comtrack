@@ -4,7 +4,7 @@ Tool pribadi untuk menemukan hackathon, Business Case Competition (BCC), dan Bus
 
 Pengambilan data direncanakan hanya saat pengguna menekan **Cari sekarang**. Tidak ada pencarian berkala.
 
-## Status: tahap 3 — pengambilan website nyata
+## Status: tahap 4 — kualitas data dan relevansi
 
 Yang sudah tersedia:
 
@@ -20,10 +20,13 @@ Yang sudah tersedia:
 - Adapter khusus berkas EPIC pada website OU Festival, dengan pengambilan manual melalui CLI.
 - Penyimpanan hasil nyata, bukti/kutipan per field, status sumber, log, dan hasil job.
 - Pembacaan ulang sumber yang sama tidak membuat lomba baru; perubahan hasil ekstraksi disimpan sebagai versi berikutnya.
+- Parsing tanggal Indonesia/Inggris/ISO, periode registrasi, waktu dengan zona eksplisit, dan beberapa gelombang.
+- Evaluasi kategori, cakupan Indonesia, jenjang mahasiswa, status pendaftaran, serta alasan hasil disembunyikan/perlu dicek.
+- Pencocokan lintas sumber secara konservatif, bukti multisumber, asal nilai per field, dan konflik yang tidak menimpa data pasti secara diam-diam.
 
 Belum tersedia pada tahap ini: feed lomba, worker/antrean asinkron, discovery, integrasi Instagram, OCR, dan instalasi PWA. API pengelolaan sumber dan feed belum dibuat; halaman frontend masih berupa pemeriksaan koneksi. Sumber OU Festival baru didaftarkan saat perintah pengambilan dijalankan, dan lomba hanya disimpan setelah halaman nyata berhasil dibaca. Tidak ada seed lomba atau sumber contoh saat startup.
 
-Tahap selanjutnya: kualitas data dan relevansi, parsing tanggal lebih luas, deduplikasi lintas sumber, serta penanganan konflik. Tahap 3 hanya memakai identitas deterministik khusus EPIC berdasarkan cabang dan edisi; belum melakukan penggabungan nama lintas website.
+Tahap selanjutnya: worker terpisah dan antrean job manual yang dapat dipicu frontend, termasuk pemulihan setelah crash. Pengambilan website aktif saat ini masih satu adapter OU Festival; pencocokan lintas sumber tahap 4 diuji menggunakan observasi fixture, belum mengaktifkan scraper website tambahan.
 
 ## Prasyarat
 
@@ -31,7 +34,7 @@ Tahap selanjutnya: kualitas data dan relevansi, parsing tanggal lebih luas, dedu
 - Python **3.11+**; pengembangan awal diverifikasi menggunakan Python 3.13.
 - npm, tersedia bersama Node.js.
 
-Tidak perlu server database terpisah, API key, atau layanan berbayar untuk menjalankan tahap 3. SQLite dan transport HTTP memakai modul bawaan Python. Beautiful Soup ditambahkan untuk parsing HTML.
+Tidak perlu server database terpisah, API key, atau layanan berbayar untuk menjalankan tahap 4. SQLite dan transport HTTP memakai modul bawaan Python; parsing HTML memakai Beautiful Soup. Tahap 4 tidak menambah dependency.
 
 ## Struktur proyek
 
@@ -46,6 +49,7 @@ comtrack/
 │   │   ├── repository.py   # Operasi penyimpanan
 │   │   ├── collect.py      # CLI pengambilan manual dan inspeksi hasil
 │   │   ├── collectors/     # HTTP publik dan adapter OU Festival EPIC
+│   │   ├── quality/        # Tanggal, relevansi, identitas, penggabungan, dan ingest atomik
 │   │   └── migrations/     # Migrasi SQL berurutan
 │   ├── tests/              # Tes database sementara, tanpa seed aplikasi
 │   ├── requirements.in    # Dependency langsung dan rentang versi
@@ -154,15 +158,39 @@ Output memuat informasi lomba, bukti asli beserta hash/waktu pengambilan, dan ri
 
 Informasi yang diambil mencakup nama/edisi, penyelenggara, jenjang, syarat tim, deadline registrasi, pengumpulan BMC/proposal, tanggal final mahasiswa, biaya per tahap, serta tautan halaman pendaftaran/juknis. Kutipan biaya mempertahankan syarat kelulusan BMC; lomba tidak dilabeli gratis secara keseluruhan. Basis biaya per orang/per tim tetap `unknown` karena tidak disebutkan jelas pada berkas.
 
-Tanggal tanpa tahun eksplisit tetap kosong dengan teks asli dan penanda `needs_review`. WIB hanya disimpan jika tertulis dalam halaman; jam tidak ditambahkan. Negara, venue, hadiah, serta status pendaftaran yang belum dapat diverifikasi tidak diisi dengan dugaan. Final mahasiswa dipisahkan dari final SMA menggunakan keterangan dalam berkas.
+Tanggal tanpa tahun eksplisit tetap kosong dengan teks asli dan penanda `needs_review`. WIB hanya disimpan jika tertulis dalam halaman; jam tidak ditambahkan tanpa bukti. Negara, venue, dan hadiah yang belum diketahui tidak diisi dengan dugaan. Status pendaftaran dihitung dari periode yang cukup jelas, dengan asal status dicatat sebagai `timeline`; pernyataan eksplisit sumber dibedakan dengan asal `source`. Final mahasiswa dipisahkan dari final SMA menggunakan keterangan dalam berkas. Adapter menandai cakupan nasional Indonesia dari berkas penyelenggara, tanpa mengarang persyaratan kewarganegaraan.
 
-**Batasan sumber saat verifikasi:** halaman detail `/competition/53` mengembalikan HTML dengan tanggal `NaN` dan memerlukan login untuk mendaftar. Adapter memakai berkas publik pada halaman utama sebagai bukti. Tautan pendaftaran/juknis disimpan dari anchor asli, tetapi login tidak dilakukan dan isi juknis belum diambil. Relevansi serta status pendaftaran masih perlu evaluasi tahap 4.
+**Batasan sumber saat verifikasi:** halaman detail `/competition/53` mengembalikan HTML dengan tanggal `NaN` dan memerlukan login untuk mendaftar. Adapter memakai berkas publik pada halaman utama sebagai bukti. Tautan pendaftaran/juknis disimpan dari anchor asli, tetapi login tidak dilakukan dan isi juknis belum diambil. Label relevansi adalah hasil aturan pada informasi yang tersedia, bukan jaminan memenuhi seluruh ketentuan juknis.
 
 Pengambilan menghormati `robots.txt` dan crawl-delay, memakai satu koneksi pada satu waktu, timeout koneksi 15 detik, batas body 2 MiB, dan maksimal satu retry untuk error sementara. `Retry-After` yang panjang membuat proses berhenti; akses tidak dicoba ulang lebih awal. Redirect diperiksa ulang dan hanya diizinkan ke hostname OU Festival yang terdaftar. DNS divalidasi sebagai alamat publik dan koneksi memakai IP hasil validasi tersebut; TLS tetap memverifikasi hostname sumber. Tidak ada bypass login, CAPTCHA, atau rendering browser.
 
 CLI mencatat job manual langsung sebagai `running` dan menyelesaikannya sebagai `succeeded`, `failed`, atau `cancelled`. Permintaan tumpang tindih ditolak. `Ctrl+C` dicatat sebagai pembatalan; penghentian paksa proses/mesin dapat meninggalkan job aktif. Pemulihan otomatis job setelah crash akan ditambahkan bersama worker di tahap 5. Tidak ada pencarian otomatis saat aplikasi dibuka.
 
 **Verifikasi langsung 26 Oktober 2026:** halaman nyata berhasil diproses menjadi `EPIC — OU Festival 12 (2026/2027)`, dengan deadline registrasi 22 November 2026. Pengambilan ulang terakhir menghasilkan `unchanged` pada ID yang sama. Hasil berada di database lokal yang diabaikan Git, bukan data bawaan aplikasi.
+
+### Aturan kualitas tahap 4
+
+Perintah pengambilan kini menjalankan alur pencocokan, penggabungan, evaluasi, dan penyimpanan dalam satu transaksi. Data dari tahap 3 tetap bisa dibaca; field kualitas baru berada dalam JSON dengan nilai bawaan, sehingga schema SQLite tetap `001` dan tidak perlu mengubah migrasi lama.
+
+Untuk membaca daftar yang saat ini lolos preferensi, tanpa mengakses web:
+
+```powershell
+.\.venv\Scripts\python.exe -m backend.app.collect --list-visible
+```
+
+Daftar ini mengevaluasi ulang waktu dan preferensi saat dibaca. Status tersimpan bisa berubah ketika waktu berlalu; tidak perlu menghapus data atau menunggu scraping ulang. `--inspect-id` tetap menampilkan hasil lengkap, termasuk observasi yang disembunyikan, konflik, asal field, dan riwayat bukti. Feed frontend belum dibuat.
+
+**Relevansi:** hanya kategori hackathon/BCC/BPC yang dipilih, cakupan Indonesia, dan jenjang sesuai preferensi. Lomba dengan negara asing atau scope internasional eksplisit disembunyikan. Seminar, webinar, kelas, lowongan, lomba khusus pelajar, pengumuman pemenang tanpa bukti pendaftaran baru, serta event yang jelas selesai juga disembunyikan. Informasi kategori, negara, eligibility, jurusan/institusi, atau tanggal yang belum pasti menghasilkan `needs_review` beserta alasan. Preferensi `include_unknown_eligibility=false` menyembunyikan ketidakjelasan kelayakan; `hide_closed=false` mengizinkan pendaftaran tutup, tetapi tidak menghidupkan kembali event yang sudah selesai.
+
+**Tanggal:** tahun harus tertulis. Nama bulan Indonesia/Inggris dan ISO didukung; format numerik ambigu seperti `01/02/2030`, dua alternatif tanggal, atau kalender tidak valid tetap perlu dicek. Rentang dengan bulan/tahun bersama dapat menghasilkan awal dan akhir, tetapi `20 Desember–5 Januari 2031` tidak dipakai untuk menebak tahun awal. Teks asli selalu tersimpan. Jam hanya menjadi datetime jika zona waktunya eksplisit atau diberikan adapter dari keterangan sumber. Rentang dengan jam yang belum terpisah jelas tetap ditandai ambigu.
+
+Tanggal tanpa jam tidak dianggap tutup pada awal hari deadline. Dengan zona diketahui, penutupan dihitung setelah hari itu berakhir di zona tersebut. Tanpa zona, penutupan baru dianggap pasti setelah tanggal tersebut berakhir di seluruh zona waktu; aturan ini tidak menambahkan jam ke data sumber. Waktu yang hanya menyebut menit diberi `time_precision=minute` dan menit tersebut tidak ditutup lebih awal dengan mengasumsikan detik nol. Beberapa gelombang dihitung bersama: gelombang berikutnya yang masih terbuka menjaga lomba tetap tersedia, dan deadline tidak diketahui tidak dianggap sudah tutup. `phase_id` atau label tahap digunakan untuk membedakan gelombang; fase tanpa identitas jelas tidak digabung dengan tebakan.
+
+**Deduplikasi:** kategori dan edisi harus sama. Pencocokan lintas sumber juga membutuhkan nama yang sama setelah normalisasi dasar, beserta kecocokan tautan resmi, penyelenggara, atau halaman sumber. Nama kategori panjang/BCC/BPC, tanda baca, dan parameter tracking URL dinormalisasi. Fragment URL tetap disimpan karena dapat menunjuk cabang festival yang berbeda. Tidak ada fuzzy matching, penggabungan edisi berbeda, atau penggabungan BCC dan BPC dalam satu festival. Jika ada lebih dari satu record yang cocok, ingest ditolak agar tidak menggabungkan data secara keliru. Adapter masih dapat memberikan identitas deterministik untuk pengambilan ulang sumbernya sendiri.
+
+**Konflik dan bukti:** observasi baru disimpan sebagai `_observation` di bukti, terpisah dari nilai gabungan yang dipilih. `field_provenance` mencatat URL, hash, dan kutipan asal nilai. Nilai kosong tidak menghapus fakta lama. Tanggal ambigu dan biaya yang tidak jelas tidak menimpa informasi pasti. Perbedaan antarsumber mempertahankan nilai sebelumnya dan membuat konflik berisi kedua nilai, URL, serta hash bukti. Sumber utama boleh memperbarui informasi pastinya sendiri; riwayat lama tetap tersimpan. Persetujuan baru dari sumber yang semula berbeda dapat menandai konflik `resolved`, tanpa menghapus catatannya. Konflik deadline yang belum selesai membuat status tutup perlu dicek, bukan diam-diam menyembunyikan lomba.
+
+Pengujian lintas sumber menggunakan fixture; hanya sumber OU Festival yang benar-benar diambil dari jaringan pada tahap ini. Pemeriksaan aturan belum mencakup semua kemungkinan redaksi eligibility atau format tanggal. Konten halaman, poster, dan dokumen tetap diperlakukan sebagai data, bukan instruksi untuk mengubah preferensi atau menjalankan tindakan.
 
 ### Database dan migrasi
 
@@ -190,7 +218,7 @@ Migrasi baru dijalankan dalam transaksi. Jika satu perintah SQL gagal, perubahan
 
 Tanggal disimpan bersama teks asli. Tanggal, jam, zona waktu, biaya, dan hadiah yang belum diketahui tetap kosong; biaya memakai desimal agar tidak kehilangan presisi. Beberapa gelombang registrasi dapat disimpan sebagai entri timeline terpisah.
 
-Penghapusan sumber pantauan tidak menghapus bukti lomba atau log yang sudah tersimpan. Pembaruan lomba menyimpan riwayat dan bukti dalam satu transaksi; pembacaan ulang data identik tidak menambah versi. Penentuan identitas lomba lintas sumber dan penyaringan relevansi masih akan dikerjakan pada tahap 4.
+Penghapusan sumber pantauan tidak menghapus bukti lomba atau log yang sudah tersimpan. Pembaruan lomba menyimpan riwayat dan bukti dalam satu transaksi; pembacaan ulang data identik tidak menambah versi. Identitas lintas sumber dan evaluasi relevansi kini dijalankan oleh modul `quality`.
 
 Tabel job memiliki batas satu job aktif untuk mencegah tumpang tindih. CLI tahap 3 menggunakan penyimpanan ini secara sinkron; worker, penanganan antrean, dan pemulihan otomatis setelah crash belum tersedia. Tidak ada timer atau pencarian yang dipicu oleh startup.
 

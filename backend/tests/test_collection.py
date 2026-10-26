@@ -8,7 +8,8 @@ from unittest.mock import Mock, patch
 
 from backend.app.collect import CollectionBusyError, run_collection
 from backend.app.collectors.http import FetchError, Page, PublicClient, is_public, public_url
-from backend.app.collectors.ou_festival import ALLOWED_HOSTS, SOURCE_URL, ExtractionError, explicit_end_date, extract
+from backend.app.collectors.ou_festival import ALLOWED_HOSTS, SOURCE_URL, ExtractionError, extract
+from backend.app.quality.dates import parse_timeline
 from backend.app.database import Database
 from backend.app.repository import Repository
 
@@ -61,8 +62,8 @@ class ExtractionTests(unittest.TestCase):
                     extract(fixture_page(FIXTURE.read_bytes().replace(old, new)))
 
     def test_missing_year_or_invalid_date_not_guessed(self):
-        for raw in ("12 November", "31 Februari 2030", "01/02/2030", "22 November 2030 - 5 Desember 2030"):
-            self.assertIsNone(explicit_end_date(raw), raw)
+        for raw in ("12 November", "31 Februari 2030", "01/02/2030", "22 November 2030 atau 5 Desember 2030"):
+            self.assertIsNone(parse_timeline(raw).date, raw)
         changed = FIXTURE.read_bytes().replace(b"22 November 2030", b"22 November")
         event = extract(fixture_page(changed)).data
         self.assertIsNone(event.timeline[0].date)

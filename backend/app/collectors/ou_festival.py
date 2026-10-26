@@ -3,21 +3,19 @@
 import hashlib
 import re
 from dataclasses import dataclass
-from datetime import date
 from decimal import Decimal
 from urllib.parse import urljoin, urlsplit
 
 from bs4 import BeautifulSoup
 
 from ..models import CompetitionData, Money, TimelineEntry
+from ..quality.dates import MONTHS, parse_timeline
 from .http import Page, PublicClient
 
 SOURCE_URL = "https://ou-festival.com/"
 SOURCE_NAME = "OU Festival · EPIC Business Plan"
 ADAPTER = "ou_festival_epic"
 ALLOWED_HOSTS = frozenset({"ou-festival.com", "www.ou-festival.com"})
-MONTHS = {name: index for index, name in enumerate(
-    ("januari", "februari", "maret", "april", "mei", "juni", "juli", "agustus", "september", "oktober", "november", "desember"), 1)}
 
 
 class ExtractionError(ValueError):
@@ -35,18 +33,6 @@ class ExtractedCompetition:
 
 def text(node) -> str:
     return re.sub(r"\s+", " ", node.get_text(" ", strip=True)).strip()
-
-
-def explicit_end_date(raw: str) -> date | None:
-    """Only dates with a literal year; the explicit last endpoint is a deadline."""
-    matches = re.findall(r"(?<!\d)(\d{1,2})\s+(" + "|".join(MONTHS) + r")\s+(20\d{2})\b", raw, re.I)
-    if len(matches) != 1:
-        return None
-    day, month, year = matches[0]
-    try:
-        return date(int(year), MONTHS[month.lower()], int(day))
-    except ValueError:
-        return None
 
 
 def extract(page: Page) -> ExtractedCompetition:
@@ -78,18 +64,18 @@ def extract(page: Page) -> ExtractedCompetition:
     if "mahasiswa" not in facts["Jenjang"].lower() or "nasional" not in text(about).lower():
         raise ExtractionError("Cakupan nasional atau kelayakan mahasiswa tidak ditemukan.")
     timezone = "WIB" if footer and "tanggal" in text(footer).lower() and "WIB" in text(footer) else None
-    registration_end = explicit_end_date(facts["Pendaftaran"])
+    registration_entry = parse_timeline(facts["Pendaftaran"], kind="registration", label="Batas pendaftaran EPIC", timezone_hint=timezone)
     fields = {
         "name": "EPIC — " + title_text,
         "category": next(text(node) for node in panel.find_all("p") if "kompetisi rencana bisnis" in text(node).lower()),
         "organizer": text(heading), "edition": title_text,
         "eligibility": facts["Jenjang"] + ". " + facts["Peserta"],
         "fees": facts["Biaya"], "timeline.0": facts["Pendaftaran"],
+        "scope": text(about), "content_kind": text(panel.find("h3")),
     }
     if timezone:
         fields["timezone"] = text(footer)
-    timeline = [TimelineEntry(kind="registration", label="Batas pendaftaran EPIC", raw_text=facts["Pendaftaran"],
-                              date=registration_end, timezone=timezone, needs_review=registration_end is None)]
+    timeline = [registration_entry]
     warnings = ["Syarat rinci, domisili peserta, serta basis biaya per orang/per tim perlu dicek di juknis."]
     team = re.search(r"\b(\d+)\s*[–-]\s*(\d+)\s+orang\b", facts["Peserta"])
     fees = []
@@ -108,7 +94,8 @@ def extract(page: Page) -> ExtractedCompetition:
         label, raw_date = text(parts[0]), text(parts[1])
         description = " ".join(text(part) for part in parts[2:])
         kind = "submission" if label in ("Seleksi BMC", "Proposal lengkap") else "final" if label == "Presentasi final" else "other"
-        parsed_date = explicit_end_date(raw_date)
+        parsed = parse_timeline(raw_date, kind=kind, label=label, timezone_hint=timezone)
+        parsed_date = parsed.date
         if kind == "final":
             # Pick the university date only when the prose confirms the dated endpoint.
             student_day = re.search(r"mahasiswa pada\s+(\d{1,2})\s+(\w+)", description, re.I)
@@ -118,7 +105,8 @@ def extract(page: Page) -> ExtractedCompetition:
                 label += " mahasiswa"
             final_online = "Zoom" in description
         entry = TimelineEntry(kind=kind, label=label, raw_text=raw_date + ". " + description,
-                              date=parsed_date, timezone=timezone, needs_review=parsed_date is None)
+                              date=parsed_date, start_date=parsed.start_date if kind != "final" else None,
+                              at=parsed.at, timezone=parsed.timezone, needs_review=parsed_date is None or parsed.needs_review)
         fields[f"timeline.{len(timeline)}"] = label + ": " + entry.raw_text
         timeline.append(entry)
     if any(entry.needs_review for entry in timeline):
@@ -151,7 +139,7 @@ def extract(page: Page) -> ExtractedCompetition:
         format="online" if final_online else "unknown", fees=fees, timeline=timeline,
         source_url=page.url + "#berkas-epic", official_url=page.url + "#berkas-epic",
         registration_url=registration, guidebook_url=guidebook, relevance_status="needs_review",
-        registration_status="unknown", warnings=warnings,
+        registration_status="unknown", scope="indonesia", content_kind="competition", warnings=warnings,
     )
     if final_online:
         fields["format"] = next(entry.raw_text for entry in timeline if entry.kind == "final")

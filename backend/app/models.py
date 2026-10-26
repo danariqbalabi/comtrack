@@ -33,9 +33,23 @@ class TimelineEntry(Model):
     label: str | None = None
     raw_text: str = Field(min_length=1)
     date: Date | None = None
+    start_date: Date | None = None
     at: AwareDatetime | None = None
+    start_at: AwareDatetime | None = None
+    time_precision: Literal["minute", "second"] | None = None
     timezone: str | None = None
+    phase_id: str | None = None
     needs_review: bool = True
+
+    @model_validator(mode="after")
+    def consistent_interval(self) -> "TimelineEntry":
+        if self.date and self.at and self.date != self.at.date():
+            raise ValueError("Tanggal dan waktu deadline bertentangan.")
+        if self.start_date and self.date and self.start_date > self.date:
+            raise ValueError("Awal periode tidak boleh melewati akhir periode.")
+        if self.start_at and self.at and self.start_at > self.at:
+            raise ValueError("Waktu awal periode tidak boleh melewati akhir periode.")
+        return self
 
 
 class CompetitionData(Model):
@@ -51,6 +65,8 @@ class CompetitionData(Model):
     format: Literal["online", "offline", "hybrid", "unknown"] = "unknown"
     location: str | None = None
     country: str | None = None
+    scope: Literal["indonesia", "international", "unknown"] = "unknown"
+    content_kind: Literal["competition", "winner_announcement", "seminar", "webinar", "course", "job", "unknown"] = "unknown"
     fees: list[Money] = Field(default_factory=list)
     prizes: list[Prize] = Field(default_factory=list)
     timeline: list[TimelineEntry] = Field(default_factory=list)
@@ -59,9 +75,12 @@ class CompetitionData(Model):
     registration_url: HttpUrl | None = None
     guidebook_url: HttpUrl | None = None
     relevance_status: Literal["unreviewed", "relevant", "needs_review", "excluded"] = "unreviewed"
+    relevance_reasons: list[str] = Field(default_factory=list)
     registration_status: Literal["unknown", "upcoming", "open", "closed"] = "unknown"
+    registration_status_origin: Literal["unknown", "source", "timeline"] = "unknown"
     warnings: list[str] = Field(default_factory=list)
     conflicts: list[dict[str, Any]] = Field(default_factory=list)
+    field_provenance: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def valid_team_range(self) -> "CompetitionData":

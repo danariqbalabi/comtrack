@@ -11,6 +11,7 @@ from .collectors.http import FetchError, PublicClient
 from .database import Database
 from .models import EvidenceData, SourceData
 from .repository import Repository
+from .quality.service import ingest, visible_competitions
 
 
 class CollectionBusyError(RuntimeError):
@@ -35,18 +36,13 @@ def run_collection(repository: Repository, client: PublicClient | None = None) -
         evidence = EvidenceData(source_id=source.id, url=extracted.data.source_url,
                                 content_hash=extracted.content_hash, raw_text=extracted.raw_text,
                                 field_values=extracted.field_values, fetched_at=datetime.now(timezone.utc))
-        previous = repository.find_by_dedup_key(extracted.dedup_key)
-        if previous is None:
-            saved = repository.create_competition(extracted.data, dedup_key=extracted.dedup_key, evidence=evidence)
-            outcome = "created"
-        else:
-            saved = repository.update_competition(previous.id, extracted.data, expected_version=previous.version,
-                                                  reason="ou_festival_source_checked", evidence=evidence)
-            outcome = "updated" if saved.version != previous.version else "unchanged"
+        saved, outcome = ingest(repository, extracted.data, evidence, adapter_key=extracted.dedup_key)
         repository.record_source_check(source.id)
         result = {"job_id": job_id, "source_id": source.id, "outcome": outcome,
                   "competition_id": saved.id, "version": saved.version, "name": saved.data.name,
-                  "source_url": str(saved.data.source_url), "evidence_count": len(repository.list_evidence(saved.id))}
+                  "source_url": str(saved.data.source_url), "evidence_count": len(repository.list_evidence(saved.id)),
+                  "registration_status": saved.data.registration_status, "relevance_status": saved.data.relevance_status,
+                  "relevance_reasons": saved.data.relevance_reasons}
         repository.add_log(job_id, source_id=source.id, source_name=source.name, level="info",
                            message="Berkas EPIC berhasil diekstrak dan disimpan.", details=result)
         repository.finish_manual_job(job_id, status="succeeded", summary=result)
@@ -66,6 +62,7 @@ def main() -> int:
     action = parser.add_mutually_exclusive_group(required=True)
     action.add_argument("--source", choices=["ou-festival"], help="Ambil website nyata dan simpan hasilnya")
     action.add_argument("--inspect-id", type=int, help="Baca lomba, bukti, dan riwayat tersimpan tanpa mengakses web")
+    action.add_argument("--list-visible", action="store_true", help="Evaluasi hasil tersimpan sesuai waktu dan preferensi, tanpa mengambil web")
     args = parser.parse_args()
     from .config import get_settings
     database = Database(get_settings().resolved_database_path)
@@ -74,7 +71,9 @@ def main() -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     try:
-        if args.inspect_id is not None:
+        if args.list_visible:
+            result = {"competitions": [record.model_dump(mode="json") for record in visible_competitions(repository)]}
+        elif args.inspect_id is not None:
             result = {"competition": repository.get_competition(args.inspect_id).model_dump(mode="json"),
                       "evidence": repository.list_evidence(args.inspect_id), "history": repository.list_history(args.inspect_id)}
         else:

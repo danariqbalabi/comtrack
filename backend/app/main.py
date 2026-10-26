@@ -26,8 +26,8 @@ def get_database(request: Request) -> Database:
 
 app = FastAPI(
     title=get_settings().app_name,
-    description="API pribadi Lomba Radar. Tahap 3: pengambilan website melalui CLI manual.",
-    version="0.3.0",
+    description="API pribadi Lomba Radar. Tahap 4: kualitas data, relevansi, dan deduplikasi.",
+    version="0.4.0",
     lifespan=lifespan,
 )
 

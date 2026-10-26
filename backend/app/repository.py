@@ -2,6 +2,7 @@
 
 import json
 import sqlite3
+from contextlib import nullcontext
 from datetime import timezone
 from typing import Any, Literal
 
@@ -105,10 +106,10 @@ class Repository:
         return row["id"]
 
     def create_competition(self, data: CompetitionData, *, dedup_key: str | None = None,
-                           evidence: EvidenceData | None = None) -> CompetitionRecord:
+                           evidence: EvidenceData | None = None, _connection: sqlite3.Connection | None = None) -> CompetitionRecord:
         stamp = utc_now()
         snapshot = encode(data.model_dump(mode="json"))
-        with self.database.transaction() as conn:
+        with (nullcontext(_connection) if _connection is not None else self.database.transaction()) as conn:
             cursor = conn.execute("""INSERT INTO competitions
                 (dedup_key, name, category, data_json, first_seen_at, last_checked_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)""", (dedup_key, data.name, data.category, snapshot, stamp, stamp, stamp))
@@ -139,19 +140,20 @@ class Repository:
             return [competition_record(row) for row in rows]
 
     def update_competition(self, competition_id: int, data: CompetitionData, *, expected_version: int,
-                           reason: str, evidence: EvidenceData | None = None) -> CompetitionRecord:
+                           reason: str, evidence: EvidenceData | None = None, _connection: sqlite3.Connection | None = None) -> CompetitionRecord:
         if not reason.strip():
             raise ValueError("Alasan perubahan wajib diisi.")
         stamp = utc_now()
         new = data.model_dump(mode="json")
         snapshot = encode(new)
-        with self.database.transaction() as conn:
+        with (nullcontext(_connection) if _connection is not None else self.database.transaction()) as conn:
             row = conn.execute("SELECT * FROM competitions WHERE id = ?", (competition_id,)).fetchone()
             if row is None:
                 raise NotFoundError("Lomba tidak ditemukan.")
             if row["version"] != expected_version:
                 raise VersionConflictError("Data lomba sudah berubah; baca versi terbaru sebelum menyimpan.")
-            previous = json.loads(row["data_json"])
+            # Model defaults added by newer code are not source changes by themselves.
+            previous = CompetitionData.model_validate_json(row["data_json"]).model_dump(mode="json")
             changes = {field: {"before": previous.get(field), "after": value}
                        for field, value in new.items() if previous.get(field) != value}
             evidence_id = self._insert_evidence(conn, competition_id, evidence) if evidence else None
