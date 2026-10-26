@@ -4,7 +4,7 @@ Tool pribadi untuk menemukan hackathon, Business Case Competition (BCC), dan Bus
 
 Pengambilan data direncanakan hanya saat pengguna menekan **Cari sekarang**. Tidak ada pencarian berkala.
 
-## Status: tahap 2 — database persisten
+## Status: tahap 3 — pengambilan website nyata
 
 Yang sudah tersedia:
 
@@ -17,10 +17,13 @@ Yang sudah tersedia:
 - Model penyimpanan lomba, sumber, bukti per halaman, riwayat perubahan, job manual, log, dan preferensi.
 - Repository untuk membaca/menyimpan data secara atomik, termasuk pemeriksaan versi agar penulis lama tidak menimpa pembaruan terbaru.
 - Migrasi otomatis saat backend mulai; endpoint kesehatan juga membaca database.
+- Adapter khusus berkas EPIC pada website OU Festival, dengan pengambilan manual melalui CLI.
+- Penyimpanan hasil nyata, bukti/kutipan per field, status sumber, log, dan hasil job.
+- Pembacaan ulang sumber yang sama tidak membuat lomba baru; perubahan hasil ekstraksi disimpan sebagai versi berikutnya.
 
-Belum tersedia pada tahap ini: feed lomba, scraping, worker, discovery, integrasi Instagram, OCR, dan instalasi PWA. Operasi penyimpanan tersedia sebagai modul Python internal; API pengelolaan sumber dan feed belum dibuat. Database penggunaan tidak diisi lomba atau sumber contoh.
+Belum tersedia pada tahap ini: feed lomba, worker/antrean asinkron, discovery, integrasi Instagram, OCR, dan instalasi PWA. API pengelolaan sumber dan feed belum dibuat; halaman frontend masih berupa pemeriksaan koneksi. Sumber OU Festival baru didaftarkan saat perintah pengambilan dijalankan, dan lomba hanya disimpan setelah halaman nyata berhasil dibaca. Tidak ada seed lomba atau sumber contoh saat startup.
 
-Tahap selanjutnya: adapter website Indonesia pertama untuk mengambil lomba nyata dan menyimpannya beserta bukti sumber.
+Tahap selanjutnya: kualitas data dan relevansi, parsing tanggal lebih luas, deduplikasi lintas sumber, serta penanganan konflik. Tahap 3 hanya memakai identitas deterministik khusus EPIC berdasarkan cabang dan edisi; belum melakukan penggabungan nama lintas website.
 
 ## Prasyarat
 
@@ -28,7 +31,7 @@ Tahap selanjutnya: adapter website Indonesia pertama untuk mengambil lomba nyata
 - Python **3.11+**; pengembangan awal diverifikasi menggunakan Python 3.13.
 - npm, tersedia bersama Node.js.
 
-Tidak perlu server database terpisah, API key, atau layanan berbayar untuk menjalankan tahap 2. SQLite memakai modul bawaan Python; dependency backend tidak berubah.
+Tidak perlu server database terpisah, API key, atau layanan berbayar untuk menjalankan tahap 3. SQLite dan transport HTTP memakai modul bawaan Python. Beautiful Soup ditambahkan untuk parsing HTML.
 
 ## Struktur proyek
 
@@ -41,6 +44,8 @@ comtrack/
 │   │   ├── database.py     # Koneksi, transaksi, migrasi, dan CLI
 │   │   ├── models.py       # Kontrak data penyimpanan
 │   │   ├── repository.py   # Operasi penyimpanan
+│   │   ├── collect.py      # CLI pengambilan manual dan inspeksi hasil
+│   │   ├── collectors/     # HTTP publik dan adapter OU Festival EPIC
 │   │   └── migrations/     # Migrasi SQL berurutan
 │   ├── tests/              # Tes database sementara, tanpa seed aplikasi
 │   ├── requirements.in    # Dependency langsung dan rentang versi
@@ -121,6 +126,44 @@ Jika port backend diganti melalui opsi `--port`, sesuaikan `API_PROXY_TARGET`. P
 
 ## Pemeriksaan
 
+### Mengambil lomba nyata dari website pertama
+
+Jika virtual environment sudah tersedia dari tahap sebelumnya, perbarui dependency dahulu:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
+```
+
+Jalankan dari root repository:
+
+```powershell
+.\.venv\Scripts\python.exe -m backend.app.collect --source ou-festival
+```
+
+Perintah ini tidak memerlukan frontend atau server FastAPI yang sedang berjalan. Prosesnya sinkron di terminal: periksa `robots.txt`, ambil HTML publik, ekstrak berkas EPIC, simpan lomba dan bukti ke SQLite, lalu cetak ringkasan JSON. `outcome` berupa `created`, `updated`, atau `unchanged`; `competition_id` menunjuk data yang tersimpan. Kegagalan menghasilkan exit code bukan nol dan dicatat sebagai kegagalan sumber/job.
+
+Baca hasil lengkap tanpa permintaan web tambahan, dengan ID dari ringkasan sebelumnya:
+
+```powershell
+.\.venv\Scripts\python.exe -m backend.app.collect --inspect-id 1
+```
+
+Output memuat informasi lomba, bukti asli beserta hash/waktu pengambilan, dan riwayat perubahan. Ulangi perintah `--source ou-festival` untuk mengecek ulang sumber; ID lomba tetap sama untuk cabang dan edisi yang sama. Fixture pengujian tidak pernah dimasukkan oleh perintah ini.
+
+**Sumber yang didukung:** [berkas EPIC di halaman utama OU Festival](https://ou-festival.com/#berkas-epic). Adapter mengikuti struktur khusus situs tersebut, bukan scraper universal. Cabang olimpiade, sastra, poster, trading, dan rencana BCC yang belum dirilis tidak dibuat sebagai lomba tambahan.
+
+Informasi yang diambil mencakup nama/edisi, penyelenggara, jenjang, syarat tim, deadline registrasi, pengumpulan BMC/proposal, tanggal final mahasiswa, biaya per tahap, serta tautan halaman pendaftaran/juknis. Kutipan biaya mempertahankan syarat kelulusan BMC; lomba tidak dilabeli gratis secara keseluruhan. Basis biaya per orang/per tim tetap `unknown` karena tidak disebutkan jelas pada berkas.
+
+Tanggal tanpa tahun eksplisit tetap kosong dengan teks asli dan penanda `needs_review`. WIB hanya disimpan jika tertulis dalam halaman; jam tidak ditambahkan. Negara, venue, hadiah, serta status pendaftaran yang belum dapat diverifikasi tidak diisi dengan dugaan. Final mahasiswa dipisahkan dari final SMA menggunakan keterangan dalam berkas.
+
+**Batasan sumber saat verifikasi:** halaman detail `/competition/53` mengembalikan HTML dengan tanggal `NaN` dan memerlukan login untuk mendaftar. Adapter memakai berkas publik pada halaman utama sebagai bukti. Tautan pendaftaran/juknis disimpan dari anchor asli, tetapi login tidak dilakukan dan isi juknis belum diambil. Relevansi serta status pendaftaran masih perlu evaluasi tahap 4.
+
+Pengambilan menghormati `robots.txt` dan crawl-delay, memakai satu koneksi pada satu waktu, timeout koneksi 15 detik, batas body 2 MiB, dan maksimal satu retry untuk error sementara. `Retry-After` yang panjang membuat proses berhenti; akses tidak dicoba ulang lebih awal. Redirect diperiksa ulang dan hanya diizinkan ke hostname OU Festival yang terdaftar. DNS divalidasi sebagai alamat publik dan koneksi memakai IP hasil validasi tersebut; TLS tetap memverifikasi hostname sumber. Tidak ada bypass login, CAPTCHA, atau rendering browser.
+
+CLI mencatat job manual langsung sebagai `running` dan menyelesaikannya sebagai `succeeded`, `failed`, atau `cancelled`. Permintaan tumpang tindih ditolak. `Ctrl+C` dicatat sebagai pembatalan; penghentian paksa proses/mesin dapat meninggalkan job aktif. Pemulihan otomatis job setelah crash akan ditambahkan bersama worker di tahap 5. Tidak ada pencarian otomatis saat aplikasi dibuka.
+
+**Verifikasi langsung 26 Oktober 2026:** halaman nyata berhasil diproses menjadi `EPIC — OU Festival 12 (2026/2027)`, dengan deadline registrasi 22 November 2026. Pengambilan ulang terakhir menghasilkan `unchanged` pada ID yang sama. Hasil berada di database lokal yang diabaikan Git, bukan data bawaan aplikasi.
+
 ### Database dan migrasi
 
 Backend otomatis menerapkan migrasi yang belum dijalankan saat startup. Untuk menjalankannya secara manual dari root repository:
@@ -149,7 +192,7 @@ Tanggal disimpan bersama teks asli. Tanggal, jam, zona waktu, biaya, dan hadiah 
 
 Penghapusan sumber pantauan tidak menghapus bukti lomba atau log yang sudah tersimpan. Pembaruan lomba menyimpan riwayat dan bukti dalam satu transaksi; pembacaan ulang data identik tidak menambah versi. Penentuan identitas lomba lintas sumber dan penyaringan relevansi masih akan dikerjakan pada tahap 4.
 
-Tabel job memiliki batas satu job aktif untuk mencegah tumpang tindih. Worker, penanganan antrean, dan pemulihan job belum dijalankan pada tahap 2. Tidak ada timer atau pencarian yang dipicu oleh startup.
+Tabel job memiliki batas satu job aktif untuk mencegah tumpang tindih. CLI tahap 3 menggunakan penyimpanan ini secara sinkron; worker, penanganan antrean, dan pemulihan otomatis setelah crash belum tersedia. Tidak ada timer atau pencarian yang dipicu oleh startup.
 
 Credential tetap disimpan di environment backend; jangan menaruh token di konfigurasi sumber atau log.
 
@@ -159,7 +202,7 @@ Credential tetap disimpan di environment backend; jangan menaruh token di konfig
 .\.venv\Scripts\python.exe -m unittest discover -s backend/tests -t . -v
 ```
 
-Tes menggunakan database dalam folder sementara. Cakupannya termasuk persistensi lintas proses Python, migrasi berulang/paralel, rollback migrasi dan penyimpanan, checksum, foreign key, bukti multisumber, riwayat perubahan, konflik versi penulis, persistensi preferensi/sumber/job, dan endpoint kesehatan saat database belum siap. Semua data lomba contoh hanya digunakan di tes.
+Tes menggunakan database dalam folder sementara. Cakupannya termasuk persistensi lintas proses Python, migrasi berulang/paralel, rollback migrasi dan penyimpanan, checksum, foreign key, bukti multisumber, riwayat perubahan, konflik versi penulis, persistensi preferensi/sumber/job, dan endpoint kesehatan saat database belum siap. Tes pengambilan juga memeriksa pemisahan deadline festival/EPIC, biaya bersyarat, tanggal ambigu, idempotensi, pembaruan deadline, kegagalan jaringan/struktur, pembatalan, robots, redirect, DNS private, koneksi ke IP tervalidasi, dan retry terbatas. Semua data lomba contoh hanya digunakan di tes; HTML fixture ditulis khusus untuk pengujian, bukan snapshot live yang disamarkan.
 
 Untuk backup lokal, hentikan backend dan proses lain yang memakai database sebelum menyalin file dari `DATABASE_PATH`. Jangan commit database atau backup-nya ke Git.
 

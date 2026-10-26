@@ -55,6 +55,27 @@ class Repository:
             rows = conn.execute("SELECT * FROM sources" + (" WHERE enabled = 1" if enabled_only else "") + " ORDER BY id")
             return [source_record(row) for row in rows]
 
+    def ensure_source(self, source: SourceData) -> SourceRecord:
+        """Register only on an explicit collection request; preserve existing enabled/config settings."""
+        stamp = utc_now()
+        with self.database.transaction() as conn:
+            conn.execute("""INSERT INTO sources
+                (name, kind, url, adapter, config_json, enabled, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(kind, url) DO NOTHING""",
+                (source.name, source.kind, str(source.url), source.adapter, encode(source.config), int(source.enabled), stamp, stamp))
+            return source_record(conn.execute("SELECT * FROM sources WHERE kind = ? AND url = ?",
+                                              (source.kind, str(source.url))).fetchone())
+
+    def record_source_check(self, source_id: int, *, error: str | None = None) -> None:
+        stamp = utc_now()
+        with self.database.transaction() as conn:
+            cursor = conn.execute("""UPDATE sources SET status = ?, last_checked_at = ?,
+                last_success_at = CASE WHEN ? IS NULL THEN ? ELSE last_success_at END,
+                last_error = ?, updated_at = ? WHERE id = ?""",
+                ("failed" if error else "ok", stamp, error, stamp, error, stamp, source_id))
+            if cursor.rowcount != 1:
+                raise NotFoundError("Sumber tidak ditemukan.")
+
     def set_source_enabled(self, source_id: int, enabled: bool) -> None:
         with self.database.transaction() as conn:
             cursor = conn.execute("UPDATE sources SET enabled = ?, updated_at = ? WHERE id = ?",
@@ -186,6 +207,23 @@ class Repository:
         # The database constraint rejects overlaps. Queue/recovery behavior is implemented in stage 5.
         with self.database.transaction() as conn:
             return conn.execute("INSERT INTO collection_jobs(requested_at) VALUES (?)", (utc_now(),)).lastrowid
+
+    def start_manual_job(self) -> int:
+        """Synchronous CLI run; queue dispatch and crash recovery are deferred to stage 5."""
+        stamp = utc_now()
+        with self.database.transaction() as conn:
+            return conn.execute("""INSERT INTO collection_jobs
+                (status, requested_at, started_at, heartbeat_at) VALUES ('running', ?, ?, ?)""",
+                (stamp, stamp, stamp)).lastrowid
+
+    def finish_manual_job(self, job_id: int, *, status: Literal["succeeded", "failed", "cancelled"], summary: dict[str, Any]) -> None:
+        if status not in ("succeeded", "failed", "cancelled"):
+            raise ValueError("Status akhir job tidak valid.")
+        with self.database.transaction() as conn:
+            cursor = conn.execute("""UPDATE collection_jobs SET status = ?, summary_json = ?, finished_at = ?
+                WHERE id = ? AND status = 'running'""", (status, encode(summary), utc_now(), job_id))
+            if cursor.rowcount != 1:
+                raise NotFoundError("Job aktif tidak ditemukan.")
 
     def get_job(self, job_id: int) -> dict[str, Any]:
         with self.database.connection() as conn:
