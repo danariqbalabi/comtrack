@@ -284,7 +284,11 @@ class ApiTests(unittest.TestCase):
     def request(self, method, path, body=None, headers=None):
         app = FastAPI()
         app.state.database = self.database
-        app.include_router(router)
+        for item in getattr(self, "routers", (router,)):
+            app.include_router(item)
+        if getattr(self, "protect", False):
+            from backend.app.security import protect_writes
+            app.middleware("http")(protect_writes)
         payload = json.dumps(body).encode() if body is not None else b""
         messages = []
         async def receive():
@@ -292,7 +296,7 @@ class ApiTests(unittest.TestCase):
         async def send(message):
             messages.append(message)
         scope = {"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": method,
-                 "scheme": "http", "path": path, "raw_path": path.encode(), "query_string": b"",
+                 "scheme": "http", "path": path.split("?")[0], "raw_path": path.split("?")[0].encode(), "query_string": path.partition("?")[2].encode(),
                  "root_path": "", "server": ("127.0.0.1", 8000), "client": ("127.0.0.1", 9000),
                  "headers": [(key.encode(), value.encode()) for key, value in {
                      "content-type": "application/json", **(headers or {}),

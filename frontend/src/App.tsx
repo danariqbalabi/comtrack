@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, dateTime, deadline, safeLink, type Competition, type Feed, type Job } from './api'
 import Detail from './Detail'
+import Settings from './Settings'
 
 const statuses: Record<string, string> = { queued: 'Menunggu worker', running: 'Sedang mencari', succeeded: 'Pencarian selesai', partial: 'Sebagian sumber berhasil', failed: 'Pencarian gagal', cancelled: 'Dibatalkan', open: 'Pendaftaran terbuka', closed: 'Pendaftaran tutup', upcoming: 'Segera dibuka', unknown: 'Tanggal perlu dicek' }
 
@@ -8,6 +9,7 @@ export default function App() {
   const [route, setRoute] = useState(location.hash)
   useEffect(() => { const change = () => { setRoute(location.hash); window.scrollTo(0, 0) }; addEventListener('hashchange', change); return () => removeEventListener('hashchange', change) }, [])
   const match = route.match(/^#competition\/(\d+)$/)
+  if (route === '#settings') return <div className="shell"><header><a className="brand" href="#">◎ Lomba Radar</a><a href="#">← Feed lomba</a></header><main><Settings /></main></div>
   if (match) return <div className="shell"><header><a className="brand" href="#">◎ Lomba Radar</a><a href="#">← Feed lomba</a></header><main><Detail id={Number(match[1])} /></main></div>
   return <FeedPage />
 }
