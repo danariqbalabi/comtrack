@@ -9,6 +9,7 @@ from starlette.concurrency import run_in_threadpool
 from .config import Settings, get_settings
 from .database import Database, MigrationError
 from .jobs_api import router as jobs_router
+from .feed_api import router as feed_router
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.include_router(jobs_router)
+app.include_router(feed_router)
 
 
 class HealthResponse(BaseModel):
