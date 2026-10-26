@@ -8,6 +8,7 @@ import threading
 from datetime import datetime, timezone
 
 from .collectors import ou_festival
+from .collectors.public import Batch, collect_html, collect_rss
 from .collectors.http import FetchError
 from .database import Database
 from .job_queue import JobQueue, LostLeaseError, SourceDisabledError
@@ -28,7 +29,7 @@ def collect_ou(source, client=None):
     return ou_festival.collect(client)
 
 
-ADAPTERS = {ou_festival.ADAPTER: collect_ou}
+ADAPTERS = {ou_festival.ADAPTER: collect_ou, "public_html": collect_html, "rss": collect_rss}
 
 
 def safe_error(error):
@@ -76,17 +77,26 @@ def execute_job(queue: JobQueue, job_id: int, token: str, *, client=None, adapte
                     break
                 if lost.is_set():
                     raise LostLeaseError("Worker kehilangan hak pemrosesan.")
-                evidence = EvidenceData(source_id=source["source_id"], url=extracted.data.source_url,
-                                        content_hash=extracted.content_hash, raw_text=extracted.raw_text,
-                                        field_values=extracted.field_values, fetched_at=datetime.now(timezone.utc))
-                saved, outcome = ingest(repository, extracted.data, evidence, adapter_key=extracted.dedup_key,
-                                        guard=lambda conn: queue.source_guard(conn,job_id,token,source))
-                result = {"job_id":job_id,"source_id":source["source_id"],"outcome":outcome,
-                          "competition_id":saved.id,"version":saved.version,"name":saved.data.name,
-                          "source_url":str(saved.data.source_url),"evidence_count":len(repository.list_evidence(saved.id)),
-                          "registration_status":saved.data.registration_status,"relevance_status":saved.data.relevance_status,
-                          "relevance_reasons":saved.data.relevance_reasons}
-                queue.finish_source(job_id,token,source,result=result)
+                batch = extracted if isinstance(extracted, Batch) else Batch([extracted], inspected=1)
+                results = []
+                for item in batch.items:
+                    if shutdown.is_set():
+                        break
+                    evidence = EvidenceData(source_id=source["source_id"], url=item.data.source_url,
+                                            content_hash=item.content_hash, raw_text=item.raw_text,
+                                            field_values=item.field_values, fetched_at=datetime.now(timezone.utc))
+                    saved, outcome = ingest(repository, item.data, evidence, adapter_key=item.dedup_key or None,
+                                            guard=lambda conn: queue.source_guard(conn,job_id,token,source))
+                    results.append({"job_id":job_id,"source_id":source["source_id"],"outcome":outcome,
+                              "competition_id":saved.id,"version":saved.version,"name":saved.data.name,
+                              "source_url":str(saved.data.source_url),"evidence_count":len(repository.list_evidence(saved.id)),
+                              "registration_status":saved.data.registration_status,"relevance_status":saved.data.relevance_status,
+                              "relevance_reasons":saved.data.relevance_reasons})
+                if shutdown.is_set():
+                    break
+                result = results[0] if not isinstance(extracted, Batch) else {"inspected":batch.inspected,"competitions":results,"errors":batch.errors}
+                error = "Sebagian artikel gagal diverifikasi; lihat hasil sumber." if batch.errors else None
+                queue.finish_source(job_id,token,source,result=result,error=error)
             except LostLeaseError:
                 raise  # Stale workers must not record failures or alter new owners' jobs.
             except SourceDisabledError as error:

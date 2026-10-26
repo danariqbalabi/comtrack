@@ -13,6 +13,12 @@ from .repository import Repository, NotFoundError
 router = APIRouter(prefix="/api", tags=["settings"])
 
 
+@router.get("/source-catalog")
+def source_catalog():
+    from .source_catalog import catalog
+    return {"items": catalog()}
+
+
 class SourceInput(Model):
     name: str = Field(min_length=1, max_length=200)
     url: str = Field(min_length=1, max_length=2000)
