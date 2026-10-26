@@ -15,6 +15,13 @@ class Settings(BaseSettings):
 
     app_name: str = "Lomba Radar"
     app_env: str = "development"
+    database_path: Path = Path("data/lomba-radar.db")
+
+    @property
+    def resolved_database_path(self) -> Path:
+        """Resolve relative paths from the repository, independent of the launch directory."""
+        path = self.database_path.expanduser()
+        return (path if path.is_absolute() else ROOT / path).resolve()
 
 
 @lru_cache

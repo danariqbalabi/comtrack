@@ -1,12 +1,34 @@
-from fastapi import Depends, FastAPI, Response
+import logging
+import sqlite3
+from contextlib import asynccontextmanager
+
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from .config import Settings, get_settings
+from .database import Database, MigrationError
+
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    database = Database(get_settings().resolved_database_path)
+    await run_in_threadpool(database.migrate)
+    application.state.database = database
+    yield
+
+
+def get_database(request: Request) -> Database:
+    return request.app.state.database
+
 
 app = FastAPI(
     title=get_settings().app_name,
-    description="API pribadi Lomba Radar. Tahap 1: fondasi dan pemeriksaan kesehatan.",
-    version="0.1.0",
+    description="API pribadi Lomba Radar. Tahap 2: fondasi penyimpanan persisten.",
+    version="0.2.0",
+    lifespan=lifespan,
 )
 
 
@@ -14,10 +36,18 @@ class HealthResponse(BaseModel):
     status: str = "ok"
     service: str
     environment: str
+    database: str = "ok"
+    schema_version: str
 
 
 @app.get("/api/health", response_model=HealthResponse, tags=["health"])
-def health(response: Response, settings: Settings = Depends(get_settings)) -> HealthResponse:
-    """Report API availability; no database or provider is configured at this stage."""
+def health(response: Response, settings: Settings = Depends(get_settings),
+           database: Database = Depends(get_database)) -> HealthResponse:
+    """Only report healthy after reading the initialized application database."""
     response.headers["Cache-Control"] = "no-store"
-    return HealthResponse(service=settings.app_name, environment=settings.app_env)
+    try:
+        version = database.check()
+    except (sqlite3.Error, MigrationError, OSError):
+        logger.exception("Database health check failed")
+        raise HTTPException(status_code=503, detail="Database belum siap.") from None
+    return HealthResponse(service=settings.app_name, environment=settings.app_env, schema_version=version)
