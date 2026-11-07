@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     database_path: Path = Path("data/lomba-radar.db")
     worker_lease_seconds: int = Field(default=90, ge=30, le=3600)
     worker_poll_seconds: float = Field(default=1, ge=0.1, le=30)
+    scheduler_poll_seconds: float = Field(default=5, ge=1, le=30)
     brave_api_key: SecretStr = SecretStr("")
     discovery_provider_enabled: bool = False
     apify_token: SecretStr = SecretStr("")

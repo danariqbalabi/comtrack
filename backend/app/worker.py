@@ -1,4 +1,4 @@
-"""Separate process: polls durable requests, never schedules or invents collection jobs."""
+"""Separate process: handles manual/scheduled jobs; the scheduler owns dispatch."""
 
 import argparse
 import logging
@@ -16,6 +16,7 @@ from .job_queue import JobQueue, LostLeaseError, SourceDisabledError
 from .models import EvidenceData
 from .quality.service import ingest
 from .repository import Repository
+from .scheduled_collection import ScheduledPageClient
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,7 @@ def execute_job(queue: JobQueue, job_id: int, token: str, *, client=None, adapte
     shutdown = shutdown or threading.Event()
     done = threading.Event(); lost = threading.Event()
     errors = []
+    automatic = queue.automation_settings(job_id)
 
     def heartbeat():
         while not done.wait(min(10, queue.lease_seconds / 3)):
@@ -69,12 +71,18 @@ def execute_job(queue: JobQueue, job_id: int, token: str, *, client=None, adapte
                 raise LostLeaseError("Worker kehilangan hak pemrosesan.")
             try:
                 queue.start_source(job_id, token, source)
+                if automatic:
+                    from .scheduler import SCHEDULED_ADAPTERS
+                    if source['adapter'] not in SCHEDULED_ADAPTERS or source['source_kind'] not in ('website','rss'):
+                        raise SourceDisabledError('Adapter ini belum diizinkan untuk otomatisasi tahap 2.')
                 adapter = adapters.get(source["adapter"])
                 if adapter is None:
                     if source["source_kind"] == "instagram":
                         raise SourceNotConnectedError("Instagram belum terhubung; adapter/provider belum tersedia.")
                     raise ValueError("Adapter sumber belum didukung: " + source["adapter"])
-                extracted = adapter(source, client)
+                source_client = ScheduledPageClient(source['source_url'],automatic.max_pages_per_source,client,
+                    reserve=lambda:queue.reserve_scheduled_page(job_id,token,source)) if automatic else client
+                extracted = adapter(source, source_client)
                 if shutdown.is_set():
                     break
                 if lost.is_set():
@@ -99,6 +107,8 @@ def execute_job(queue: JobQueue, job_id: int, token: str, *, client=None, adapte
                 if shutdown.is_set():
                     break
                 result = results[0] if not isinstance(extracted, Batch) else {"inspected":batch.inspected,"competitions":results,"errors":batch.errors}
+                if automatic:
+                    result['page_budget'] = {'used':source_client.used,'limit':source_client.limit}
                 error = "Sebagian artikel gagal diverifikasi; lihat hasil sumber." if batch.errors else None
                 queue.finish_source(job_id,token,source,result=result,error=error)
             except LostLeaseError:
@@ -121,7 +131,7 @@ def execute_job(queue: JobQueue, job_id: int, token: str, *, client=None, adapte
 
 
 def main():
-    parser=argparse.ArgumentParser(description="Worker terpisah untuk permintaan manual Lomba Radar")
+    parser=argparse.ArgumentParser(description="Worker terpisah untuk job manual dan terjadwal Lomba Radar")
     parser.add_argument("--once",action="store_true",help="Proses maksimal satu job yang sudah antre, lalu keluar")
     args=parser.parse_args()
     from .config import get_settings
@@ -130,7 +140,7 @@ def main():
     shutdown=threading.Event()
     if hasattr(signal,"SIGTERM"):
         signal.signal(signal.SIGTERM, lambda *_: shutdown.set())
-    print("Worker siap. Hanya permintaan manual; tidak ada pencarian berkala.",flush=True)
+    print("Worker siap. Memproses antrean manual/terjadwal; jalankan scheduler terpisah untuk otomatisasi.",flush=True)
     try:
         while not shutdown.is_set():
             claimed=queue.claim()

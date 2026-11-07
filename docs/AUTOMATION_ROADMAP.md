@@ -2,7 +2,7 @@
 
 Disepakati 8 November 2026. Dokumen ini adalah rencana; fitur yang tercantum belum otomatis dianggap tersedia.
 
-Status tahap 1: kontrol otomatisasi dan batas tersimpan sudah diimplementasikan, default nonaktif. Scheduler belum tersedia; status aktif merupakan keinginan yang disimpan untuk tahap berikutnya. Batas baru belum diterapkan pada pencarian manual. Endpoint konfigurasi dan status tidak menghubungi provider. Tahap 2 dan seterusnya belum dikerjakan.
+Status: tahap 1 dan 2 sudah diimplementasikan. Scheduler terpisah menjadwalkan website/RSS terdaftar dengan batas sumber dan halaman, pemulihan restart, satu job aktif bersama mode manual, pemilihan sumber bergiliran, dan kontrol jeda. Endpoint konfigurasi/status tidak menghubungi provider. Discovery, sumber baru, Instagram, OCR/AI dan provider berbayar belum masuk alur otomatis; tahap 3 dan seterusnya belum dikerjakan. Kuota provider yang tersimpan belum membatasi mode manual.
 
 ## Tujuan dan batas cakupan
 

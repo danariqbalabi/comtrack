@@ -1,4 +1,5 @@
-"""Validated automation preferences. Stage 1 stores intent; it never dispatches jobs."""
+"""Validated automation preferences and transactional schedule changes."""
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Literal
 
@@ -57,8 +58,20 @@ class AutomationStore:
 
     def save(self, settings: AutomationSettings, *, expected_version: int):
         with self.database.transaction() as conn:
+            previous = AutomationSettings.model_validate_json(conn.execute('SELECT data_json FROM automation_settings WHERE singleton=1').fetchone()[0])
             changed = conn.execute('''UPDATE automation_settings SET data_json=?,version=version+1,updated_at=?
                 WHERE singleton=1 AND version=?''', (encode(settings.model_dump(mode='json')),utc_now(),expected_version))
             if changed.rowcount != 1:
                 raise VersionConflictError('Pengaturan sudah berubah di tab/proses lain. Muat ulang sebelum menyimpan.')
+            if not settings.enabled:
+                conn.execute("UPDATE automation_schedule SET next_run_at=NULL,last_status='disabled' WHERE singleton=1")
+            elif not previous.enabled:
+                conn.execute("UPDATE automation_schedule SET next_run_at=?,last_status='waiting' WHERE singleton=1",(utc_now(),))
+            elif settings.interval_minutes != previous.interval_minutes:
+                next_at = (datetime.now(timezone.utc)+timedelta(minutes=settings.interval_minutes)).isoformat(timespec='microseconds')
+                conn.execute("UPDATE automation_schedule SET next_run_at=?,last_status='waiting' WHERE singleton=1",(next_at,))
             return self.snapshot(conn.execute('SELECT * FROM automation_settings WHERE singleton=1').fetchone())
+
+    def schedule(self):
+        with self.database.connection() as conn:
+            return dict(conn.execute('SELECT * FROM automation_schedule WHERE singleton=1').fetchone())

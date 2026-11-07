@@ -10,7 +10,7 @@ export type Competition = {
     prizes: { description: string }[]; conflicts: Record<string, unknown>[]
   }
 }
-export type Job = { id: number; status: string; requested_at: string; sources: { id: number; source_name: string; status: string; error: string | null }[]; logs: { id: number; message: string; created_at: string }[] }
+export type Job = { id: number; status: string; trigger: 'manual' | 'scheduled'; requested_at: string; sources: { id: number; source_name: string; status: string; error: string | null }[]; logs: { id: number; message: string; created_at: string }[] }
 export type Feed = { items: Competition[]; total: number; offset: number; limit: number }
 const base = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
 export async function api<T>(path: string, method = 'GET', body?: unknown): Promise<T> {

@@ -8,7 +8,8 @@ type Controls = {
   instagram_public_competition_accounts_only: true
 }
 type Snapshot = { settings: Controls; version: number; updated_at: string; runtime: {
-  state: string; scheduler_available: boolean; running: boolean; limits_enforced: boolean; message: string
+  state: string; scheduler_available: boolean; scheduler_online: boolean; running: boolean; limits_enforced: boolean; message: string
+  next_run_at: string | null; last_tick_at: string | null; last_enqueued_at: string | null; last_job_id: number | null
   providers: Record<string, { configured: boolean; automation_allowed?: boolean }>
 } }
 const limits: { key: keyof Controls; label: string; min: number; max: number; hint: string }[] = [
@@ -33,34 +34,52 @@ export default function AutomationSettings() {
     finally { setLoading(false) }
   }
   useEffect(() => { void load() }, [])
+  useEffect(() => {
+    let disposed = false
+    const timer = setInterval(() => {
+      api<Snapshot>('/automation').then(data => { if (!disposed) setSnapshot(previous => previous ? { ...previous, runtime: data.runtime } : previous) }).catch(() => {})
+    }, 10000)
+    return () => { disposed = true; clearInterval(timer) }
+  }, [])
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!draft || !snapshot) return
     setSaving(true); setError(''); setMessage('')
     try {
       apply(await api<Snapshot>('/automation', 'PUT', { settings: draft, expected_version: snapshot.version }))
-      setMessage('Konfigurasi otomatisasi disimpan. Belum ada pencarian otomatis yang dijalankan.')
+      setMessage(draft.enabled ? 'Otomatisasi diaktifkan. Scheduler akan memproses jadwal jika prosesnya berjalan.' : 'Otomatisasi dijeda. Tidak ada job otomatis baru yang dibuat.')
     } catch (err) { setError(err instanceof Error ? err.message : 'Gagal menyimpan pengaturan.') }
     finally { setSaving(false) }
   }
   return <div className="panel" aria-labelledby="automation-title">
-    <h2 id="automation-title">Otomatisasi · Tahap 1</h2>
-    <p className="muted">Atur cara radar bekerja nanti. Tahap ini menyimpan konfigurasi; scheduler mulai dibangun pada tahap 2.</p>
+    <h2 id="automation-title">Otomatisasi · Tahap 2</h2>
+    <p className="muted">Website/RSS yang sudah terdaftar dapat diperiksa berkala oleh scheduler dan worker di server.</p>
     {error && <div className="notice error" role="alert">{error} <button disabled={saving || loading} onClick={() => void load()}>Muat ulang konfigurasi</button></div>}
     {message && <p className="notice" role="status">{message}</p>}
     {loading ? <p role="status">Memuat konfigurasi otomatisasi…</p> : draft && snapshot && <>
-      <div className="notice" role="status"><strong>{snapshot.settings.enabled ? 'Keinginan aktif tersimpan · menunggu scheduler' : 'Otomatisasi nonaktif'}</strong><p>{snapshot.runtime.message}</p></div>
+      <div className="notice" role="status"><strong>{({ disabled: 'Otomatisasi nonaktif', waiting_scheduler: 'Aktif · scheduler belum terdeteksi', waiting: 'Aktif · menunggu jadwal', busy: 'Aktif · menunggu job sebelumnya', no_sources: 'Belum ada website/RSS yang dapat dijadwalkan', enqueued: 'Job otomatis masuk antrean' } as Record<string, string>)[snapshot.runtime.state] || snapshot.runtime.state}</strong><p>{snapshot.runtime.message}</p>
+        <p>Jadwal berikutnya: {snapshot.runtime.next_run_at ? dateTime(snapshot.runtime.next_run_at) : 'Belum dijadwalkan'}</p>
+        <p>Heartbeat scheduler: {dateTime(snapshot.runtime.last_tick_at)}</p>
+        <p>Job otomatis terakhir: {snapshot.runtime.last_job_id ? `#${snapshot.runtime.last_job_id} · ${dateTime(snapshot.runtime.last_enqueued_at)}` : 'Belum ada'}</p>
+        {!snapshot.runtime.scheduler_online && snapshot.settings.enabled && <p>Jalankan proses scheduler dan worker di server. Status diperbarui setiap 10 detik.</p>}
+      </div>
       <form onSubmit={event => void save(event)}>
         <fieldset disabled={saving} className="automation-fields">
-          <label className="check"><input type="checkbox" checked={draft.enabled} onChange={e => setDraft({ ...draft, enabled: e.target.checked })} />Aktifkan otomatisasi saat scheduler tersedia</label>
+          <label className="check"><input type="checkbox" checked={draft.enabled} onChange={e => setDraft({ ...draft, enabled: e.target.checked })} />Aktifkan otomatisasi website/RSS</label>
           {limits.map(field => <label key={field.key}>{field.label}<input type="number" required min={field.key === 'provider_daily_request_limit' && draft.allow_paid_providers ? 1 : field.min} max={field.key === 'max_new_sources_per_run' ? draft.max_sources_per_run : field.max} step="1" value={Number.isFinite(draft[field.key]) ? String(draft[field.key]) : ''} onChange={e => setDraft({ ...draft, [field.key]: e.target.value === '' ? NaN : Number(e.target.value) })} /><small className="muted">{field.hint}</small></label>)}
           <label className="check"><input type="checkbox" checked={draft.allow_paid_providers} onChange={e => setDraft({ ...draft, allow_paid_providers: e.target.checked })} />Izinkan provider berbayar untuk otomatisasi</label>
           <label>Anggaran provider per hari (USD)<input type="number" required min={draft.allow_paid_providers ? '0.01' : '0'} max="1000" step="0.01" value={draft.provider_daily_budget_usd} onChange={e => setDraft({ ...draft, provider_daily_budget_usd: e.target.value })} /><small className="muted">Bawaan: USD 0.00. Izin berbayar memerlukan anggaran dan batas request di atas nol.</small></label>
           <p className="muted">Instagram: hanya akun publik media lomba dan penyelenggara. Akun pribadi tidak dipantau otomatis.</p>
         </fieldset>
-        <p className="muted">Batas ini untuk alur otomatisasi mendatang dan belum diterapkan pada Cari sekarang. Pengaturan ini tidak memasang credential atau mengaktifkan provider di server.</p>
+        <p className="muted">Tahap 2 menerapkan batas sumber dan halaman. Batas sumber baru, gambar, dan anggaran provider disimpan untuk tahap berikutnya. Provider berbayar tidak dipanggil oleh job otomatis tahap ini. Cari sekarang tetap memakai alur manual.</p>
         <button className="primary" disabled={saving}>{saving ? 'Menyimpan…' : 'Simpan otomatisasi'}</button>
       </form>
+      {snapshot.settings.enabled && <button className="subtle" disabled={saving} onClick={async () => {
+        setSaving(true); setError(''); setMessage('')
+        try { apply(await api<Snapshot>('/automation', 'PUT', { settings: { ...snapshot.settings, enabled: false }, expected_version: snapshot.version })); setMessage('Otomatisasi dijeda. Job terjadwal akan melewati sumber berikutnya; job manual tetap berjalan.') }
+        catch (err) { setError(err instanceof Error ? err.message : 'Gagal menjeda otomatisasi.') }
+        finally { setSaving(false) }
+      }}>Jeda otomatisasi</button>}
       <p className="muted">Terakhir disimpan: {dateTime(snapshot.updated_at)} · versi {snapshot.version}</p>
       <h3>Kesiapan integrasi</h3>
       <p className="muted">Pemeriksaan konfigurasi lokal, tanpa memanggil provider. Credential dan kuota belum diverifikasi.</p>

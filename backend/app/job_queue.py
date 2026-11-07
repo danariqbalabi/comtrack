@@ -50,7 +50,7 @@ class JobQueue:
                 conn.execute("""UPDATE collection_jobs SET status='queued',worker_token=NULL,
                     lease_expires_at=NULL,heartbeat_at=NULL WHERE id=?""", (job["id"],))
                 conn.execute("UPDATE collection_job_sources SET status='pending',started_at=NULL WHERE job_id=? AND status='running'", (job["id"],))
-                self._log(conn, job["id"], "Heartbeat kedaluwarsa; job manual akan dilanjutkan worker.", level="warning")
+                self._log(conn, job["id"], "Heartbeat kedaluwarsa; job akan dilanjutkan worker.", level="warning")
             else:
                 message = "Worker berhenti berulang; batas pemulihan habis." if has_sources else "Job versi lama terputus; jalankan pencarian manual baru."
                 conn.execute("""UPDATE collection_jobs SET status='failed',finished_at=?,worker_token=NULL,
@@ -93,13 +93,39 @@ class JobQueue:
                 raise NoSourcesError("Belum ada sumber aktif. Daftarkan OU Festival melalui CLI terlebih dahulu.")
             if len(sources) > 30:
                 raise NoSourcesError("Maksimal 30 sumber per job.")
-            job_id = conn.execute("INSERT INTO collection_jobs(requested_at) VALUES (?)", (utc_now(),)).lastrowid
-            for source in sources:
-                conn.execute("""INSERT INTO collection_job_sources
-                    (job_id,source_id,source_name,source_url,source_kind,adapter,config_json) VALUES (?,?,?,?,?,?,?)""",
-                    (job_id,source["id"],source["name"],source["url"],source["kind"],source["adapter"],source["config_json"]))
-            self._log(conn, job_id, "Permintaan manual masuk antrean; menunggu worker.")
-            return job_id, True
+            return self._enqueue_sources(conn,sources,requested_at=utc_now()), True
+
+    def _enqueue_sources(self, conn, sources, *, requested_at, automatic=False):
+        job_id = conn.execute('INSERT INTO collection_jobs(requested_at) VALUES (?)', (requested_at,)).lastrowid
+        for source in sources:
+            conn.execute('''INSERT INTO collection_job_sources
+                (job_id,source_id,source_name,source_url,source_kind,adapter,config_json) VALUES (?,?,?,?,?,?,?)''',
+                (job_id,source['id'],source['name'],source['url'],source['kind'],source['adapter'],source['config_json']))
+        self._log(conn,job_id,'Permintaan otomatis terjadwal masuk antrean; menunggu worker.' if automatic else 'Permintaan manual masuk antrean; menunggu worker.')
+        return job_id
+
+    def automation_settings(self, job_id):
+        from .automation import AutomationSettings
+        with self.database.connection() as conn:
+            row = conn.execute('SELECT settings_json FROM automation_job_runs WHERE job_id=?', (job_id,)).fetchone()
+            return AutomationSettings.model_validate_json(row['settings_json']) if row else None
+
+    def reserve_scheduled_page(self, job_id, token, source):
+        from .automation import AutomationSettings
+        from .collectors.http import FetchError
+        with self.database.transaction() as conn:
+            self.source_guard(conn,job_id,token,source)
+            row = conn.execute('SELECT settings_json FROM automation_job_runs WHERE job_id=?',(job_id,)).fetchone()
+            if row is None:
+                raise ValueError('Reservasi halaman hanya untuk job terjadwal.')
+            limit = AutomationSettings.model_validate_json(row['settings_json']).max_pages_per_source
+            usage = conn.execute('SELECT pages_used FROM automation_source_usage WHERE job_source_id=?',(source['id'],)).fetchone()
+            used = usage['pages_used'] if usage else 0
+            if used >= limit:
+                raise FetchError('Batas halaman otomatisasi untuk sumber ini tercapai; halaman berikutnya dilewati.')
+            conn.execute('''INSERT INTO automation_source_usage(job_source_id,pages_used) VALUES (?,1)
+                ON CONFLICT(job_source_id) DO UPDATE SET pages_used=pages_used+1''',(source['id'],))
+            return used+1
 
     def claim(self, *, job_id: int | None = None):
         with self.database.transaction() as conn:
@@ -115,7 +141,7 @@ class JobQueue:
             conn.execute("""UPDATE collection_jobs SET status='running',worker_token=?,
                 lease_expires_at=?,heartbeat_at=?,started_at=COALESCE(started_at,?),attempts=attempts+1 WHERE id=?""",
                 (token,self._expiry(),utc_now(),utc_now(),job["id"]))
-            self._log(conn, job["id"], "Worker mulai memproses permintaan manual.")
+            self._log(conn, job["id"], "Worker mulai memproses permintaan.")
             return job["id"], token
 
     @staticmethod
@@ -137,6 +163,10 @@ class JobQueue:
 
     def source_guard(self, conn, job_id, token, source):
         self.assert_lease(conn,job_id,token)
+        if conn.execute('SELECT 1 FROM automation_job_runs WHERE job_id=?', (job_id,)).fetchone():
+            enabled = json.loads(conn.execute('SELECT data_json FROM automation_settings WHERE singleton=1').fetchone()[0])['enabled']
+            if not enabled:
+                raise SourceDisabledError('Otomatisasi dijeda; sumber terjadwal dilewati.')
         active=conn.execute("SELECT enabled FROM sources WHERE id=?", (source["source_id"],)).fetchone()
         if not active or not active["enabled"]:
             raise SourceDisabledError("Sumber dihapus atau dinonaktifkan; pengambilan dilewati.")
@@ -200,6 +230,7 @@ class JobQueue:
             if row is None:
                 raise NotFoundError("Job tidak ditemukan.")
             job=dict(row);job.pop("worker_token")
+            job['trigger'] = 'scheduled' if conn.execute('SELECT 1 FROM automation_job_runs WHERE job_id=?',(job_id,)).fetchone() else 'manual'
             job["summary"]=json.loads(job.pop("summary_json"))
             job["sources"]=[]
             for source in conn.execute("SELECT * FROM collection_job_sources WHERE job_id=? ORDER BY id",(job_id,)):

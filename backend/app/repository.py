@@ -234,6 +234,7 @@ class Repository:
                 raise NotFoundError("Job tidak ditemukan.")
             item = dict(row)
             item["summary"] = json.loads(item.pop("summary_json"))
+            item['trigger'] = 'scheduled' if conn.execute('SELECT 1 FROM automation_job_runs WHERE job_id=?',(job_id,)).fetchone() else 'manual'
             return item
 
     def add_log(self, job_id: int, *, source_name: str, level: Literal["info", "warning", "error"],

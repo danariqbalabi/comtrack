@@ -1,25 +1,47 @@
 # Lomba Radar
 
-Radar pribadi untuk hackathon, Business Case Competition (BCC), dan Business Plan Competition (BPC) di Indonesia. Sasaran awal mahasiswa. **Pencarian hanya saat menekan Cari sekarang**; tidak ada scheduler pengambilan berkala.
+Radar pribadi untuk hackathon, Business Case Competition (BCC), dan Business Plan Competition (BPC) di Indonesia. Sasaran awal mahasiswa. Pencarian manual tetap tersedia; website/RSS terdaftar juga dapat diperiksa berkala saat otomatisasi diaktifkan.
 
-## Otomatisasi · tahap 1
+## Otomatisasi · tahap 2
 
-Tahap 1 roadmap otomatisasi sudah tersedia: buka **Pengaturan → Otomatisasi · Tahap 1**. Simpan pilihan aktif/nonaktif, interval (30 menit–7 hari), batas sumber per pencarian (1–30), sumber baru (0–30 dan tidak melebihi batas sumber), halaman per sumber (1–10), serta gambar per postingan (0–5). Pengaturan Instagram dibatasi ke akun publik media lomba dan penyelenggara, tanpa opsi memperluas ke akun pribadi.
+Tahap 2 tersedia di **Pengaturan → Otomatisasi · Tahap 2**: kontrol aktif/jeda, interval (30 menit–7 hari), jadwal berikutnya, heartbeat scheduler, dan ID job otomatis terakhir. Pengaturan tahap 1 tetap tersimpan. Batas jumlah sumber (1–30) dan halaman per sumber (1–10) sekarang diterapkan pada job otomatis. Sumber baru, gambar, dan anggaran disiapkan untuk tahap selanjutnya. Instagram tetap dibatasi ke akun publik media lomba dan penyelenggara.
 
 Izin provider berbayar default **nonaktif**, batas request harian **0**, dan anggaran harian **USD 0.00**. Mengizinkan provider berbayar memerlukan batas request dan anggaran positif; anggaran disimpan sebagai desimal maksimal dua angka di belakang titik. Status kesiapan integrasi memeriksa konfigurasi server tanpa memanggil layanan atau menampilkan credential. Status dikonfigurasi tidak menjamin key valid atau kuota tersedia.
 
-**Tahap ini baru menyimpan konfigurasi. Scheduler dan penerapan batas otomatisasi belum tersedia.** Centang aktif akan menampilkan status menunggu scheduler; tidak ada job, pengambilan web, aktivasi provider, atau pengeluaran baru yang dipicu oleh penyimpanan. Pencarian manual tetap memakai alur dan konfigurasi provider sebelumnya; batas baru ini belum membatasi panggilan manual. Scheduler dikerjakan terpisah pada tahap 2.
+**Scheduler tahap 2 hanya memproses website/RSS yang sudah terdaftar** dengan adapter OU Festival, HTML publik, atau RSS. Discovery, penemuan sumber baru, Instagram, OCR, AI, dan provider berbayar belum masuk job otomatis, termasuk bila izin berbayar dicentang. Tidak ada panggilan berbayar dari scheduler. Pencarian manual tetap memakai alur/konfigurasi provider sebelumnya dan belum dibatasi kuota otomatisasi.
 
-Konfigurasi tersimpan di tabel `automation_settings`, schema **004**, dan bertahan setelah restart. API `GET /api/automation` membaca konfigurasi beserta status runtime; `PUT /api/automation` menerima `{"settings":{...},"expected_version":1}`. Header mutasi, validasi origin, dan login pribadi mengikuti API lainnya. Penyimpanan dari versi lama menghasilkan HTTP 409 agar perubahan tab/proses lain tidak tertimpa. Pengaturan tidak mengubah preferensi relevansi atau sumber pantauan.
+Konfigurasi tersimpan di `automation_settings`, jadwal di `automation_schedule`, dan snapshot konfigurasi setiap job otomatis di `automation_job_runs`, schema **005**. API `GET /api/automation` membaca konfigurasi beserta status runtime; `PUT /api/automation` menerima `{"settings":{...},"expected_version":1}`. Header mutasi, validasi origin, dan login pribadi mengikuti API lainnya. Penyimpanan dari versi lama menghasilkan HTTP 409 agar perubahan tab/proses lain tidak tertimpa. Pengaturan tidak mengubah preferensi relevansi atau sumber pantauan.
 
-Verifikasi tahap 1: pengujian API/storage mencakup default nonaktif, validasi batas dan anggaran, persistensi/migrasi, konflik penulis, kesiapan integrasi tanpa jaringan, proteksi akses, serta pencarian manual yang tetap berjalan. Roadmap lengkap ada di [docs/AUTOMATION_ROADMAP.md](docs/AUTOMATION_ROADMAP.md).
+Untuk mulai: **restart backend dan worker dengan kode terbaru**, jalankan scheduler di terminal tambahan, lalu centang **Aktifkan otomatisasi website/RSS → Simpan otomatisasi**. Aktivasi pertama jatuh tempo segera. Membiarkan kotak tersebut kosong mempertahankan mode manual.
+
+```powershell
+.\.venv\Scripts\python.exe -m backend.app.scheduler
+```
+
+Jalankan backend, worker, dan scheduler sebagai tiga proses server. Scheduler hanya memasukkan job ke SQLite; worker mengambil web. Setelah konfigurasi disimpan, tab browser maupun API boleh ditutup, selama scheduler/worker/mesin tetap hidup. `SCHEDULER_POLL_SECONDS` default 5 detik mengatur pemeriksaan jadwal, bukan interval scraping. Status scheduler memakai heartbeat dengan toleransi minimal 30 detik dan UI diperbarui setiap 10 detik; penghentian proses tidak langsung terlihat pada saat yang sama.
+
+Scheduler dan pencarian manual berbagi batas satu job aktif. Saat antrean sibuk, jadwal yang jatuh tempo menunggu tanpa menambah job; setelah antrean bebas, satu job dapat dibuat. Setelah downtime panjang, hanya satu job dibuat, lalu jadwal berikutnya dihitung dari waktu dispatch terbaru—tidak mengejar semua interval yang terlewat. Jika sumber melebihi batas per pencarian, pemilihan berputar menurut ID agar seluruh sumber mendapat giliran. Tanpa sumber yang sesuai, UI menampilkan alasan dan scheduler menunggu interval berikutnya. Menambahkan sumber tidak memaksa jadwal maju; gunakan Cari sekarang atau jeda/aktifkan kembali jika perlu.
+
+Perubahan interval saat aktif menjadwalkan ulang ke waktu simpan + interval baru. Perubahan batas lainnya berlaku untuk job berikutnya; snapshot batas job yang sudah antre tidak berubah. **Jeda otomatisasi** menghentikan dispatch baru dan membuat worker melewati sumber otomatis berikutnya. Request yang sudah berjalan boleh selesai di jaringan, tetapi transaksi ingest memeriksa ulang status jeda sebelum menulis hasil. Data yang sudah disimpan sebelumnya dipertahankan; job manual tidak dibatalkan. `Ctrl+C` pada scheduler hanya menghentikan proses penjadwal; worker yang masih berjalan dapat menyelesaikan job antrean. Gunakan tombol jeda untuk menghentikan pekerjaan otomatis.
+
+Halaman daftar/RSS ikut memakai batas halaman per sumber. Misalnya batas 1 hanya cukup membaca daftar, sehingga artikel detail belum dapat diverifikasi. Reservasi halaman disimpan di SQLite sebelum pengambilan, sehingga crash/pemulihan tidak mereset batas dan worker lama/jeda diperiksa sebelum request berikutnya. Reservasi yang sudah dibuat tidak dikembalikan bila request gagal atau proses mati. Robots, redirect dan retry HTTP internal tetap mengikuti pembatasan transport yang sudah ada; batas halaman ini menghitung panggilan pengambilan halaman, bukan jumlah paket/request HTTP. Jika batas tercapai, sumber bisa dilaporkan gagal/sebagian berhasil dengan hasil yang sudah tersimpan tetap utuh.
+
+Periksa satu kali tanpa daemon menggunakan `python -m backend.app.scheduler --once`; perintah ini hanya memeriksa/dispatch, tidak mengambil sumber. Untuk mengulang uji live terhadap database sementara tanpa API/frontend:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.scheduler_smoke
+```
+
+Uji langsung berhasil membuat satu job `scheduled`, memproses OU Festival nyata, menyimpan satu lomba dan bukti, membuktikan restart tidak membuat job duplikat, serta membuktikan jeda menghentikan dispatch. Batas satu halaman tercatat `used=1, limit=1`. Tidak ada provider berbayar yang digunakan. Roadmap lengkap ada di [docs/AUTOMATION_ROADMAP.md](docs/AUTOMATION_ROADMAP.md).
+
+Verifikasi tahap 2: **159 tes backend lulus** pada salinan persis file commit, termasuk 21 tes scheduler/batas halaman, build TypeScript/Vite berhasil, dan `pip check` bersih. Migrasi mempertahankan data/job/log lama. Pemeriksaan visual UI melalui browser belum dijalankan pada tahap ini; UI divalidasi melalui build dan API/storage, sedangkan scheduler/worker diuji sebagai proses terpisah dengan sumber nyata.
 
 ## Yang sudah bekerja
 
 - Feed dari SQLite asli: kategori, pencarian nama/penyelenggara, urutan baru ditemukan/deadline, pagination.
 - Detail: timeline, biaya per tahap, eligibility, tautan sumber/pendaftaran/guidebook, semua bukti dan riwayat versi.
 - Pengaturan: tambah website/RSS/Instagram, aktif/nonaktif/hapus pantauan, preferensi relevansi, dan katalog **38 kandidat sumber**.
-- Worker terpisah, antrean persisten, klaim atomik, heartbeat, pemulihan crash, log per sumber, penolakan penulis lama.
+- Worker dan scheduler terpisah, antrean/jadwal persisten, klaim atomik, heartbeat, pemulihan crash, log per sumber, penolakan penulis lama.
 - Collector khusus OU Festival EPIC, RSS/Atom yang memverifikasi artikel asli, HTML artikel/daftar dengan selector CSS.
 - Adapter discovery Brave Search dan Instagram Apify yang **opt-in**, serta OCR poster/carousel memakai Tesseract dan cache hash.
 - PWA dengan ikon, manifest, pemasangan pada browser yang mendukung, dan shell offline. API/data lomba tidak disimpan oleh service worker.
@@ -54,7 +76,7 @@ Terminal kedua:
 .\.venv\Scripts\python.exe -m backend.app.worker
 ```
 
-Buka **http://127.0.0.1:8000**. Di Pengaturan, klik **Pakai sumber OU Festival yang sudah teruji**, kembali ke feed, lalu **Cari sekarang**. Tidak perlu credential untuk sumber ini. Worker bisa menyelesaikan permintaan setelah tab ditutup, selama proses worker dan server/mesin tetap hidup. API tidak perlu terus berjalan untuk worker memproses antrean yang sudah tersimpan.
+Buka **http://127.0.0.1:8000**. Di Pengaturan, klik **Pakai sumber OU Festival yang sudah teruji**, kembali ke feed, lalu **Cari sekarang**. Tidak perlu credential untuk sumber ini. Worker bisa menyelesaikan permintaan setelah tab ditutup, selama proses worker dan server/mesin tetap hidup. API tidak perlu terus berjalan untuk worker memproses antrean yang sudah tersimpan. Untuk pencarian berkala, jalankan scheduler di terminal tambahan dan aktifkan otomatisasi seperti panduan di atas.
 
 Untuk pengembangan frontend dengan hot reload, jalankan terminal ketiga:
 
@@ -127,7 +149,7 @@ Adapter OU Festival memakai [berkas EPIC halaman utama](https://ou-festival.com/
 
 Ganti ID sesuai output. `collect --source ou-festival` tetap tersedia sebagai CLI sinkron. Tanpa antrean, worker tidak membuat job atau mengakses sumber. Hanya satu job aktif; refresh berulang mengembalikan ID yang sama, termasuk jika pilihan sumber berbeda. Maksimal 30 sumber/job. Job aktif menggunakan snapshot sumber saat diminta; sumber yang kemudian dihapus/nonaktif dilewati sebelum hasil disimpan.
 
-Worker memperbarui heartbeat paling lambat 10 detik. Lease default 90 detik; pemulihan saat polling antrean/enqueue/recover melanjutkan sumber belum selesai, maksimal tiga klaim job. Worker lama ditolak di transaksi penyimpanan. Crash sesudah ingest sebelum status sumber selesai bisa membaca sumber ulang, tetapi tidak menggandakan lomba/bukti. Setelah batas pemulihan habis, job gagal dan antrean bebas. `Ctrl+C` membatalkan job. Sumber gagal tidak membatalkan sumber lain; artikel yang sudah tersimpan tetap dipertahankan bila artikel lain gagal.
+Worker memperbarui heartbeat paling lambat 10 detik. Lease default 90 detik; pemulihan saat polling antrean/enqueue/recover/scheduler melanjutkan sumber belum selesai, maksimal tiga klaim job. Worker lama ditolak di transaksi penyimpanan. Crash sesudah ingest sebelum status sumber selesai bisa membaca sumber ulang, tetapi tidak menggandakan lomba/bukti. Setelah batas pemulihan habis, job gagal dan antrean bebas. `Ctrl+C` pada worker membatalkan job. Sumber gagal tidak membatalkan sumber lain; artikel yang sudah tersimpan tetap dipertahankan bila artikel lain gagal. API/CLI membedakan `trigger=manual` dan `trigger=scheduled`; metadata terjadwal disimpan terpisah agar tabel job lama beserta semua relasi tetap utuh.
 
 API tersedia di `/docs`: `GET /api/competitions`, `GET /api/competitions/{id}`, sumber/preferensi, `POST /api/refresh`, serta status `/api/jobs/latest` dan `/api/jobs/{id}`. Mutasi memerlukan JSON dan header `X-Lomba-Radar: 1`; origin browser harus ada di `API_ALLOWED_ORIGINS`. Tanpa sumber aktif, refresh mengembalikan 409.
 
@@ -150,13 +172,13 @@ docker compose logs -f api worker
 
 Buka http://127.0.0.1:8000. Port Compose hanya terikat ke loopback. API dan worker berbagi volume `radar-data`; `docker compose down` mempertahankan volume. **Jangan pakai `down -v` jika ingin mempertahankan data.** Untuk HTTPS, letakkan reverse proxy pribadi seperti Caddy/Nginx di depan port lokal ini, dengan domain/sertifikat sendiri. Tidak ada deployment ke akun luar yang dilakukan.
 
-Docker tidak tersedia pada mesin verifikasi saat implementasi: Dockerfile/Compose disiapkan, tetapi image/container belum diuji lewat build Docker. Backend produksi dan frontend build diuji langsung sebagai proses lokal. Untuk production tanpa Docker, set `APP_ENV=production`, build frontend, jalankan Uvicorn dan worker memakai process manager OS. Tidak ada scheduler scraping yang perlu diaktifkan.
+Docker tidak tersedia pada mesin verifikasi saat implementasi: Dockerfile/Compose disiapkan, tetapi image/container belum diuji lewat build Docker. Compose kini juga memiliki service `scheduler` yang berbagi volume data dengan API dan worker. Untuk production tanpa Docker, set `APP_ENV=production`, build frontend, jalankan Uvicorn, worker dan scheduler memakai process manager OS. Scheduler tetap tidak mengambil apa pun selama otomatisasi nonaktif.
 
 ## Konfigurasi dan penyimpanan
 
 Seluruh nilai/flag ada di [.env.example](.env.example). `DATABASE_PATH` default `data/lomba-radar.db`; path relatif dihitung dari root repo. `WORKER_LEASE_SECONDS` 30–3600, `WORKER_POLL_SECONDS` 0.1–30 (poll antrean, bukan jadwal scraping). `API_PROXY_TARGET` untuk Vite development. Jangan menyimpan secret di variabel `VITE_` karena bersifat publik.
 
-Schema terbaru **004**: data lomba, sumber, bukti, riwayat, job/log, snapshot sumber, preferensi, kandidat discovery, dan konfigurasi otomatisasi. Startup menerapkan migrasi SQL berurutan dengan checksum tanpa menghapus data lama. Jangan mengubah file migrasi yang sudah diterapkan. SQLite memakai WAL, foreign key, transaksi dan disk lokal; bukan network share.
+Schema terbaru **005**: data lomba, sumber, bukti, riwayat, job/log, snapshot sumber, preferensi, kandidat discovery, konfigurasi/jadwal otomatisasi, dan metadata job otomatis. Startup menerapkan migrasi SQL berurutan dengan checksum tanpa menghapus data lama. Jangan mengubah file migrasi yang sudah diterapkan. SQLite memakai WAL, foreign key, transaksi dan disk lokal; bukan network share.
 
 ```powershell
 .\.venv\Scripts\python.exe -m backend.app.database migrate

@@ -29,5 +29,17 @@ services:
     depends_on:
       api:
         condition: service_healthy
+  scheduler:
+    image: comtrack:local
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_PATH: /app/data/lomba-radar.db
+    command: ["python", "-m", "backend.app.scheduler"]
+    volumes:
+      - radar-data:/app/data
+    depends_on:
+      api:
+        condition: service_healthy
 volumes:
   radar-data:
