@@ -2,11 +2,11 @@
 
 Radar pribadi untuk hackathon, Business Case Competition (BCC), dan Business Plan Competition (BPC) di Indonesia. Sasaran awal mahasiswa. Pencarian manual tetap tersedia; website/RSS terdaftar juga dapat diperiksa berkala saat otomatisasi diaktifkan.
 
-## Discovery otomatis · tahap 3
+## Discovery dan pantauan website otomatis - tahap 4
 
 Tahap 3 menambahkan discovery di luar daftar website pantauan. Scheduler membentuk maksimal tiga query per job dari kategori dan jenjang pada preferensi, dengan variasi Indonesia/Inggris, tahun, pencarian info lomba, dan situs kampus. Posisi rotasi dan rencana query disimpan di SQLite; restart tidak mengembalikannya ke query pertama.
 
-**Yang masuk daftar pantauan baru sebatas layanan sistem `Discovery web`. Domain yang ditemukan tetap kandidat, belum otomatis menjadi sumber pantauan.** Onboarding website otomatis dikerjakan pada tahap 4. Hasil pencarian disimpan dengan URL, domain, query asal, waktu, dan status. Tracking umum di URL diabaikan untuk deduplikasi. Kandidat sosial media belum dibaca; akun Instagram tetap menunggu tahap 6.
+**Artikel website yang lolos kualifikasi otomatis menjadi sumber pantauan mulai job berikutnya**, dengan adapter `discovered_article`. Yang didaftarkan adalah URL artikel yang sudah dibaca, bukan seluruh domain atau homepage. Penemuan artikel lain tetap melalui discovery. Tidak mengikuti link artikel (0 hop tautan); satu pengambilan artikel per sumber, dibatasi kuota halaman dan pengamanan redirect/robots yang sama. Hasil pencarian disimpan dengan URL, domain, query asal, waktu, dan status. Tracking umum di URL diabaikan untuk deduplikasi. Kandidat sosial media belum dibaca; akun Instagram tetap menunggu tahap 6.
 
 Untuk memakai discovery terjadwal:
 
@@ -23,7 +23,7 @@ Angka reservasi **bukan tagihan aktual** dan tidak menjamin batas tagihan ekster
 
 Snippet dan judul pencarian tidak dipakai sebagai fakta lomba. Worker membuka artikel asli dengan pembatasan robots, DNS/IP publik, redirect, ukuran dan waktu yang sudah ada. Hasil baru di-ingest lewat alur kualitas setelah ekstraksi artikel berhasil. `verified` pada kandidat hanya berarti artikel berhasil diekstrak; kelayakan dan status pendaftaran dinilai terpisah. Artikel yang gagal diakses/strukturnya belum didukung tetap kandidat. Setelah batas halaman discovery tercapai, URL lain disimpan tanpa dibuka. Hasil verifikasi lama dipertahankan jika batas membuat pemeriksaan ulang belum dapat dijalankan, dengan waktu pemeriksaan sebelumnya tetap terlihat.
 
-Panel **Discovery · Tahap 3** di Pengaturan menampilkan status konfigurasi, request/anggaran estimasi harian, query job terakhir, kandidat per domain, serta filter status dan pagination. Tombol **Isi formulir sumber** tetap memerlukan tindakan pengguna untuk menambahkan pantauan. API read-only: `GET /api/discovery` dan `GET /api/discovery/candidates?status=verified&domain=example.com&offset=0&limit=30`. Membaca API/panel tidak menjalankan pencarian. Schema terbaru **006** menambahkan rencana query, rotasi, metadata kandidat, dan ledger reservasi tanpa menghapus data lama.
+Panel **Discovery · Tahap 4** di Pengaturan menampilkan status konfigurasi, request/anggaran estimasi harian, query job terakhir, kandidat per domain, serta filter status dan pagination. Panel menampilkan keputusan pantauan beserta alasan dan ID sumber: menunggu penilaian, perlu diperiksa, ditolak, aktif, sudah terdaftar, atau batas tercapai. Tombol **Isi formulir sumber** tetap tersedia untuk penambahan manual. API read-only: `GET /api/discovery` dan `GET /api/discovery/candidates?status=verified&domain=example.com&offset=0&limit=30`. Membaca API/panel tidak menjalankan pencarian. Schema **006** menambahkan rencana query, rotasi, metadata kandidat, dan ledger reservasi tanpa menghapus data lama.
 
 Pemeriksaan tahap 3: pengujian kontrak/provider memakai respons mock eksplisit; belum ada key Brave sehingga pencarian Brave live belum diuji. Uji website live membuktikan fallback saat provider belum terhubung tetap menyimpan OU Festival nyata. Untuk mengulang fallback tanpa provider berbayar dan tanpa mengubah database utama:
 
@@ -31,15 +31,25 @@ Pemeriksaan tahap 3: pengujian kontrak/provider memakai respons mock eksplisit; 
 .\.venv\Scripts\python.exe -m scripts.discovery_smoke
 ```
 
-Hasil akhir tahap 3: **183 tes backend lulus**, termasuk 24 tes discovery, juga pada salinan persis file commit. Build TypeScript/Vite dan `pip check` berhasil. UI diperiksa lewat build dan pengujian API; verifikasi visual browser tidak dilakukan pada tahap ini. Database lokal sudah dibackup dan dimigrasikan tanpa mengaktifkan layanan berbayar.
+Hasil pemeriksaan tahap 3 sebelumnya: **183 tes backend lulus**, termasuk 24 tes discovery, juga pada salinan persis file commit. Build TypeScript/Vite dan `pip check` berhasil. UI diperiksa lewat build dan pengujian API; verifikasi visual browser tidak dilakukan pada tahap ini. Database lokal sudah dibackup dan dimigrasikan tanpa mengaktifkan layanan berbayar.
+
+## Kualifikasi website - tahap 4
+
+Aktivasi otomatis hanya berlangsung pada discovery **terjadwal**, setelah observasi berhasil masuk database beserta URL/hash/kutipan bukti. Observasi asli dan hasil gabungan dinilai ulang terhadap preferensi terkini. Harus berupa lomba kategori pilihan, cakupan Indonesia dan syarat peserta yang jelas, tanpa tanggal ambigu/konflik aktif, serta memiliki tanggal akhir pendaftaran yang belum lewat. Ini penyaringan konservatif berbasis teks, bukan jaminan validitas penyelenggara. Informasi yang belum cukup tetap kandidat; hasil di luar preferensi ditolak. Artikel gagal diekstrak atau yang hanya muncul di snippet tidak diaktifkan. Kandidat lama dinilai ketika ditemukan dan diverifikasi ulang, bukan lewat migrasi massal.
+
+Batas sumber baru menggunakan nilai lebih ketat dari snapshot job dan pengaturan terkini. Nilai 0 menahan semua penambahan. Maksimal 30 sumber keseluruhan, termasuk sumber nonaktif dan sumber sistem. Ledger `website_onboardings` menyimpan pemakaian jatah per job, tetap dihitung sesudah penghapusan sumber atau restart. Transaksi dan pemeriksaan lease/jeda melindungi proses paralel. URL dengan www/tracking yang sama tidak ditambahkan ulang, konfigurasi dan status sumber yang sudah ada dipertahankan. Kandidat yang tertahan batas dapat dinilai ulang jika ditemukan pada job berikutnya.
+
+Adapter artikel hanya membaca ulang artikel dengan parser HTML yang sudah berhasil dipakai saat discovery. Jika struktur berubah, kegagalan dicatat dan bukti lama dipertahankan. Tidak menyimpulkan halaman daftar/RSS secara spekulatif. Domain tujuan berbeda ditahan; akses produksi memakai pemeriksaan DNS/IP publik dan redirect dari collector, termasuk saat pengambilan ulang. URL sosial media tetap menunggu tahap 6.
+
+Schema terbaru **007** menambahkan keputusan onboarding dan ledger penambahan sumber tanpa menghapus data sebelumnya. Pemeriksaan tahap 4: 202 tes backend, termasuk 19 tes onboarding (alur worker hingga job berikutnya, jatah bersama, konkurensi, restart, sumber nonaktif, jeda, dan bukti wajib); build TypeScript/Vite dan `pip check`. Integrasi discovery memakai respons fixture, belum ada key untuk uji Brave live. Tidak mengaktifkan provider berbayar atau otomatisasi lokal. UI diverifikasi melalui build/API, tanpa pemeriksaan visual browser.
 
 ## Scheduler dan kontrol otomatisasi
 
-Kontrol tersedia di **Pengaturan → Otomatisasi · Tahap 3**: aktif/jeda, interval (30 menit–7 hari), jadwal berikutnya, heartbeat scheduler, dan ID job otomatis terakhir. Batas jumlah sumber (1–30) dan halaman per sumber (1–10) diterapkan pada job otomatis, ditambah kuota request/estimasi biaya discovery pada tahap 3. Batas sumber baru dan gambar disiapkan untuk tahap selanjutnya. Instagram tetap dibatasi ke akun publik media lomba dan penyelenggara.
+Kontrol tersedia di **Pengaturan → Otomatisasi · Tahap 4**: aktif/jeda, interval (30 menit–7 hari), jadwal berikutnya, heartbeat scheduler, dan ID job otomatis terakhir. Batas jumlah sumber (1–30) dan halaman per sumber (1–10) diterapkan pada job otomatis, ditambah kuota request/estimasi biaya discovery pada tahap 3. Batas sumber baru diterapkan pada tahap 4; batas gambar disiapkan untuk tahap selanjutnya. Instagram tetap dibatasi ke akun publik media lomba dan penyelenggara.
 
 Izin provider berbayar default **nonaktif**, batas request harian **0**, dan anggaran harian **USD 0.00**. Mengizinkan provider berbayar memerlukan batas request dan anggaran positif; anggaran disimpan sebagai desimal maksimal dua angka di belakang titik. Status kesiapan integrasi memeriksa konfigurasi server tanpa memanggil layanan atau menampilkan credential. Status dikonfigurasi tidak menjamin key valid atau kuota tersedia.
 
-Scheduler memproses website/RSS terdaftar dengan adapter OU Festival, HTML publik, atau RSS. Tahap 3 menambahkan discovery Brave jika preferensi mengizinkannya dan seluruh syarat provider/biaya terpenuhi. Instagram, OCR/AI, dan aktivasi domain kandidat belum masuk job otomatis. Pencarian manual tetap memakai alur/konfigurasi provider sebelumnya dan belum dibatasi kuota otomatisasi.
+Scheduler memproses website/RSS terdaftar dengan adapter OU Festival, HTML publik, atau RSS. Tahap 3 menambahkan discovery Brave jika preferensi mengizinkannya dan seluruh syarat provider/biaya terpenuhi. Tahap 4 menambahkan pantauan artikel website yang lolos kualifikasi. Instagram dan OCR/AI belum masuk job otomatis. Pencarian manual tetap memakai alur/konfigurasi provider sebelumnya dan belum dibatasi kuota otomatisasi.
 
 Konfigurasi tersimpan di `automation_settings`, jadwal di `automation_schedule`, dan snapshot konfigurasi setiap job otomatis di `automation_job_runs`. API `GET /api/automation` membaca konfigurasi beserta status runtime; `PUT /api/automation` menerima `{"settings":{...},"expected_version":1}`. Header mutasi, validasi origin, dan login pribadi mengikuti API lainnya. Penyimpanan dari versi lama menghasilkan HTTP 409 agar perubahan tab/proses lain tidak tertimpa. Pengaturan tidak mengubah preferensi relevansi atau sumber pantauan.
 
@@ -209,7 +219,7 @@ Docker tidak tersedia pada mesin verifikasi saat implementasi: Dockerfile/Compos
 
 Seluruh nilai/flag ada di [.env.example](.env.example). `DATABASE_PATH` default `data/lomba-radar.db`; path relatif dihitung dari root repo. `WORKER_LEASE_SECONDS` 30–3600, `WORKER_POLL_SECONDS` 0.1–30 (poll antrean, bukan jadwal scraping). `API_PROXY_TARGET` untuk Vite development. Jangan menyimpan secret di variabel `VITE_` karena bersifat publik.
 
-Schema terbaru **006**: data lomba, sumber, bukti, riwayat, job/log, snapshot sumber, preferensi, kandidat discovery, konfigurasi/jadwal otomatisasi, metadata job otomatis, rencana query dan reservasi request provider. Startup menerapkan migrasi SQL berurutan dengan checksum tanpa menghapus data lama. Jangan mengubah file migrasi yang sudah diterapkan. SQLite memakai WAL, foreign key, transaksi dan disk lokal; bukan network share.
+Schema **006**: data lomba, sumber, bukti, riwayat, job/log, snapshot sumber, preferensi, kandidat discovery, konfigurasi/jadwal otomatisasi, metadata job otomatis, rencana query dan reservasi request provider. Startup menerapkan migrasi SQL berurutan dengan checksum tanpa menghapus data lama. Jangan mengubah file migrasi yang sudah diterapkan. SQLite memakai WAL, foreign key, transaksi dan disk lokal; bukan network share.
 
 ```powershell
 .\.venv\Scripts\python.exe -m backend.app.database migrate

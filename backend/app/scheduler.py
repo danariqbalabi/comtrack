@@ -16,7 +16,7 @@ from .models import Preferences
 from .discovery import attach_plan
 
 logger = logging.getLogger(__name__)
-SCHEDULED_ADAPTERS = ('ou_festival_epic', 'public_html', 'rss', 'brave_discovery')
+SCHEDULED_ADAPTERS = ('ou_festival_epic', 'public_html', 'rss', 'brave_discovery', 'discovered_article')
 
 
 class Scheduler:

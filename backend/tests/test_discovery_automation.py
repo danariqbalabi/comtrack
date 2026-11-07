@@ -230,7 +230,7 @@ class DiscoveryAutomationTests(unittest.TestCase):
         path=Path(self.temp.name)/'old.db';old=Database(path,directory);old.migrate()
         with old.transaction() as conn:
             conn.execute("INSERT INTO discovery_candidates(url,title,status,first_seen_at,last_seen_at) VALUES ('https://example.com/old','Old','unverified','2030-01-01','2030-01-01')")
-        upgraded=Database(path);self.assertEqual(upgraded.migrate(),['006'])
+        upgraded=Database(path);self.assertEqual(upgraded.migrate(),['006','007'])
         with upgraded.connection() as conn:self.assertEqual(conn.execute('SELECT title FROM discovery_candidates').fetchone()[0],'Old')
 
     def test_blank_estimate_is_unconfigured_and_invalid_precision_rejected(self):

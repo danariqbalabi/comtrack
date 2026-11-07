@@ -59,7 +59,7 @@ class StorageTests(unittest.TestCase):
         self.assertEqual(self.repo.get_preferences(), preferences)
         self.assertEqual(self.repo.list_competitions(), [])
         self.assertEqual(self.repo.list_sources(), [])
-        self.assertEqual(self.db.check(), "006")
+        self.assertEqual(self.db.check(), "007")
 
     def test_persistence_across_a_separate_python_process(self):
         source = self.source()
@@ -181,11 +181,11 @@ print(json.dumps({'name': repo.get_competition(1).data.name, 'sources': len(repo
     def test_migration_failure_rolls_back_new_schema(self):
         migrations = Path(self.temp.name) / "migrations"
         shutil.copytree(MIGRATIONS, migrations)
-        (migrations / "007_broken.sql").write_text("CREATE TABLE should_rollback (id INTEGER);\nINVALID SQL;\n", encoding="utf8")
+        (migrations / "008_broken.sql").write_text("CREATE TABLE should_rollback (id INTEGER);\nINVALID SQL;\n", encoding="utf8")
         with self.assertRaises(sqlite3.OperationalError): Database(self.path, migrations).migrate()
         with self.db.connection() as conn:
             self.assertIsNone(conn.execute("SELECT name FROM sqlite_master WHERE name = 'should_rollback'").fetchone())
-        self.assertEqual(self.db.check(), "006")
+        self.assertEqual(self.db.check(), "007")
 
     def test_changed_applied_migration_is_rejected(self):
         migrations = Path(self.temp.name) / "migrations"
@@ -198,11 +198,11 @@ print(json.dumps({'name': repo.get_competition(1).data.name, 'sources': len(repo
         saved = self.repo.create_competition(self.fixture())
         migrations = Path(self.temp.name) / "migrations"
         shutil.copytree(MIGRATIONS, migrations)
-        (migrations / "007_add_note.sql").write_text("ALTER TABLE competitions ADD COLUMN internal_note TEXT;\n", encoding="utf8")
+        (migrations / "008_add_note.sql").write_text("ALTER TABLE competitions ADD COLUMN internal_note TEXT;\n", encoding="utf8")
         upgraded = Database(self.path, migrations)
-        self.assertEqual(upgraded.migrate(), ["007"])
+        self.assertEqual(upgraded.migrate(), ["008"])
         self.assertEqual(upgraded.migrate(), [])
-        self.assertEqual(upgraded.check(), "007")
+        self.assertEqual(upgraded.check(), "008")
         self.assertEqual(Repository(upgraded).get_competition(saved.id), saved)
         with self.assertRaises(MigrationError):
             self.db.migrate()  # Older code must not silently accept a newer database.
@@ -213,7 +213,7 @@ print(json.dumps({'name': repo.get_competition(1).data.name, 'sources': len(repo
                 path = Path(self.temp.name) / f"parallel-{attempt}.db"
                 with ThreadPoolExecutor(max_workers=3) as pool:
                     results = list(pool.map(lambda _: Database(path).migrate(), range(3)))
-                self.assertEqual(sum(result == ["001", "002", "003", "004", "005", "006"] for result in results), 1)
+                self.assertEqual(sum(result == ["001", "002", "003", "004", "005", "006", "007"] for result in results), 1)
 
     def test_lifespan_initializes_database_and_health_checks_it(self):
         settings = Settings(database_path=Path(self.temp.name) / "startup.db")
@@ -223,7 +223,7 @@ print(json.dumps({'name': repo.get_competition(1).data.name, 'sources': len(repo
                 async with lifespan(application):
                     response = health(Response(), settings, application.state.database)
                     self.assertEqual(response.database, "ok")
-                    self.assertEqual(response.schema_version, "006")
+                    self.assertEqual(response.schema_version, "007")
         asyncio.run(start())
 
     def test_health_does_not_claim_uninitialized_database_is_ready(self):

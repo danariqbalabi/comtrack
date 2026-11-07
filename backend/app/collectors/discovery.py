@@ -13,6 +13,7 @@ from .public import Batch,parse_html
 
 @dataclass
 class DiscoveryBatch(Batch):
+    onboarding_keys: dict = field(default_factory=dict)
     activity: dict = field(default_factory=lambda:{'queries_requested':0,'queries_reused':0,'candidates':0,'rejected_urls':0,'pages_verified':0})
 
 
@@ -71,6 +72,7 @@ def collect(queue,job_id,token,source,*,client=None):
                 batch.activity['pages_verified']+=1
                 if item:
                     batch.items.append(item)
+                    batch.onboarding_keys[id(item)] = key
             except FetchError as error:
                 is_limit = str(error).startswith('Batas halaman otomatisasi')
                 entry.update(status='unverified' if is_limit else 'failed',reason='Batas verifikasi halaman tercapai.' if is_limit else 'Halaman asli gagal diakses; kandidat belum terverifikasi.')

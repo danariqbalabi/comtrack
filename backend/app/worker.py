@@ -18,6 +18,7 @@ from .quality.service import ingest
 from .repository import Repository
 from .scheduled_collection import ScheduledPageClient
 from .discovery import DiscoveryBlocked
+from .collectors.discovered import ADAPTER as DISCOVERED_ADAPTER, collect as collect_discovered
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,8 @@ def collect_ou(source, client=None):
 
 
 ADAPTERS = {ou_festival.ADAPTER: collect_ou, "public_html": collect_html, "rss": collect_rss,
-            "instagram_provider": collect_instagram, "brave_discovery": collect_discovery}
+            "instagram_provider": collect_instagram, "brave_discovery": collect_discovery,
+            DISCOVERED_ADAPTER: collect_discovered}
 
 
 def safe_error(error):
@@ -97,6 +99,7 @@ def execute_job(queue: JobQueue, job_id: int, token: str, *, client=None, adapte
                 if batch.candidates:
                     queue.record_candidates(job_id, token, source, batch.candidates)
                 results = []
+                onboardings = []
                 for item in batch.items:
                     if shutdown.is_set():
                         break
@@ -105,6 +108,11 @@ def execute_job(queue: JobQueue, job_id: int, token: str, *, client=None, adapte
                                             field_values=item.field_values, fetched_at=datetime.now(timezone.utc))
                     saved, outcome = ingest(repository, item.data, evidence, adapter_key=item.dedup_key or None,
                                             guard=lambda conn: queue.source_guard(conn,job_id,token,source))
+                    if automatic and source['adapter']=='brave_discovery':
+                        from .onboarding import qualify
+                        candidate_key = extracted.onboarding_keys.get(id(item))
+                        if candidate_key:
+                            onboardings.append(qualify(queue,job_id,token,source,item,saved,candidate_key))
                     results.append({"job_id":job_id,"source_id":source["source_id"],"outcome":outcome,
                               "competition_id":saved.id,"version":saved.version,"name":saved.data.name,
                               "source_url":str(saved.data.source_url),"evidence_count":len(repository.list_evidence(saved.id)),
@@ -117,6 +125,7 @@ def execute_job(queue: JobQueue, job_id: int, token: str, *, client=None, adapte
                     result['page_budget'] = {'used':source_client.used,'limit':source_client.limit}
                 if automatic and source['adapter']=='brave_discovery':
                     result['discovery'] = extracted.activity
+                    result['onboarding'] = onboardings
                 error = "Sebagian artikel gagal diverifikasi; lihat hasil sumber." if batch.errors else None
                 if batch.errors and automatic and source['adapter']=='brave_discovery':
                     error = '; '.join(batch.errors)[:500]

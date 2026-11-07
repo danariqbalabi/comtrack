@@ -278,7 +278,7 @@ print(json.dumps(queue.get(job_id)))
         with old.transaction() as conn:
             conn.execute("UPDATE collection_jobs SET status='running',started_at='2000-01-01' WHERE id=?", (job_id,))
         upgraded = Database(path)
-        self.assertEqual(upgraded.migrate(), ["002", "003", "004", "005", "006"])
+        self.assertEqual(upgraded.migrate(), ["002", "003", "004", "005", "006", "007"])
         queue = JobQueue(upgraded)
         queue.recover()
         self.assertEqual(queue.get(job_id)["status"], "failed")
