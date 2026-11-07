@@ -264,7 +264,7 @@ class SchedulerTests(unittest.TestCase):
         with old.transaction() as conn:
             conn.execute("UPDATE automation_settings SET data_json=json_set(data_json,'$.enabled',json('true'))")
         upgraded = Database(path)
-        self.assertEqual(upgraded.migrate(),['005'])
+        self.assertEqual(upgraded.migrate(),['005','006'])
         self.assertEqual(Repository(upgraded).get_competition(saved.id),saved)
         self.assertEqual(JobQueue(upgraded).get(job_id)['logs'][0]['message'],'Kept')
         self.assertTrue(AutomationStore(upgraded).get()['settings'].enabled)

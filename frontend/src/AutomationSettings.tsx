@@ -52,8 +52,8 @@ export default function AutomationSettings() {
     finally { setSaving(false) }
   }
   return <div className="panel" aria-labelledby="automation-title">
-    <h2 id="automation-title">Otomatisasi · Tahap 2</h2>
-    <p className="muted">Website/RSS yang sudah terdaftar dapat diperiksa berkala oleh scheduler dan worker di server.</p>
+    <h2 id="automation-title">Otomatisasi · Tahap 3</h2>
+    <p className="muted">Monitoring website/RSS dan discovery kandidat baru dijalankan scheduler/worker sesuai konfigurasi.</p>
     {error && <div className="notice error" role="alert">{error} <button disabled={saving || loading} onClick={() => void load()}>Muat ulang konfigurasi</button></div>}
     {message && <p className="notice" role="status">{message}</p>}
     {loading ? <p role="status">Memuat konfigurasi otomatisasi…</p> : draft && snapshot && <>
@@ -71,7 +71,7 @@ export default function AutomationSettings() {
           <label>Anggaran provider per hari (USD)<input type="number" required min={draft.allow_paid_providers ? '0.01' : '0'} max="1000" step="0.01" value={draft.provider_daily_budget_usd} onChange={e => setDraft({ ...draft, provider_daily_budget_usd: e.target.value })} /><small className="muted">Bawaan: USD 0.00. Izin berbayar memerlukan anggaran dan batas request di atas nol.</small></label>
           <p className="muted">Instagram: hanya akun publik media lomba dan penyelenggara. Akun pribadi tidak dipantau otomatis.</p>
         </fieldset>
-        <p className="muted">Tahap 2 menerapkan batas sumber dan halaman. Batas sumber baru, gambar, dan anggaran provider disimpan untuk tahap berikutnya. Provider berbayar tidak dipanggil oleh job otomatis tahap ini. Cari sekarang tetap memakai alur manual.</p>
+        <p className="muted">Tahap 3 menerapkan batas sumber/halaman dan reservasi kuota request serta anggaran estimasi discovery per hari UTC. Domain baru belum otomatis dipantau. Batas gambar disimpan untuk tahap berikutnya. Cari sekarang tetap memakai alur manual sebelumnya.</p>
         <button className="primary" disabled={saving}>{saving ? 'Menyimpan…' : 'Simpan otomatisasi'}</button>
       </form>
       {snapshot.settings.enabled && <button className="subtle" disabled={saving} onClick={async () => {

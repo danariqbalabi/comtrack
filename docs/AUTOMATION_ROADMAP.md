@@ -2,7 +2,7 @@
 
 Disepakati 8 November 2026. Dokumen ini adalah rencana; fitur yang tercantum belum otomatis dianggap tersedia.
 
-Status: tahap 1 dan 2 sudah diimplementasikan. Scheduler terpisah menjadwalkan website/RSS terdaftar dengan batas sumber dan halaman, pemulihan restart, satu job aktif bersama mode manual, pemilihan sumber bergiliran, dan kontrol jeda. Endpoint konfigurasi/status tidak menghubungi provider. Discovery, sumber baru, Instagram, OCR/AI dan provider berbayar belum masuk alur otomatis; tahap 3 dan seterusnya belum dikerjakan. Kuota provider yang tersimpan belum membatasi mode manual.
+Status: tahap 1–3 sudah diimplementasikan. Scheduler menjadwalkan website/RSS dan discovery dengan query sesuai preferensi, rotasi, verifikasi artikel asli, kandidat domain/URL, dan reservasi kuota/estimasi biaya sebelum request. Tanpa key/estimasi tarif/izin/kuota, discovery ditahan dan website lain tetap berjalan. Pengujian Brave memakai respons mock karena key belum tersedia; fallback website diuji live. Aktivasi domain kandidat otomatis, Instagram dan OCR/AI belum masuk alur otomatis; tahap 4 dan seterusnya belum dikerjakan. Kuota discovery terjadwal belum membatasi mode manual versi sebelumnya.
 
 ## Tujuan dan batas cakupan
 

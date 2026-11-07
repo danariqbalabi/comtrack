@@ -18,20 +18,21 @@ def store_for(request: Request):
 def present(snapshot, schedule):
     config = get_settings()
     settings = snapshot['settings']
-    def provider(flag, credential):
+    def provider(flag, credential, *, discovery=False):
         configured = flag and bool(credential.get_secret_value())
-        return {'configured':configured, 'automation_allowed':False}
+        allowed = discovery and configured and config.brave_cost_per_request_usd is not None and settings.allow_paid_providers
+        return {'configured':configured, 'automation_allowed':allowed}
     heartbeat = schedule['last_tick_at']
     fresh = bool(heartbeat and (datetime.now(timezone.utc)-datetime.fromisoformat(heartbeat)).total_seconds() <= max(30,config.scheduler_poll_seconds*3))
     return {**snapshot, 'runtime':{
-        'stage':2, 'scheduler_available':True, 'scheduler_online':fresh, 'running':settings.enabled and fresh,
+        'stage':3, 'scheduler_available':True, 'scheduler_online':fresh, 'running':settings.enabled and fresh,
         'state':('waiting_scheduler' if not fresh else schedule['last_status']) if settings.enabled else 'disabled',
-        'limits_enforced':True, 'enforced_limits':['max_sources_per_run','max_pages_per_source'],
+        'limits_enforced':True, 'enforced_limits':['max_sources_per_run','max_pages_per_source','provider_daily_request_limit','provider_daily_budget_usd'],
         'next_run_at':schedule['next_run_at'], 'last_tick_at':heartbeat,
         'last_enqueued_at':schedule['last_enqueued_at'], 'last_job_id':schedule['last_job_id'],
-        'message':'Scheduler tahap 2 hanya menjadwalkan website/RSS terdaftar, dengan batas sumber dan halaman. Discovery, penambahan sumber, Instagram, OCR dan provider berbayar belum dijalankan otomatis. Pencarian manual memakai alur sebelumnya.',
+        'message':'Scheduler memantau website/RSS dan dapat mencari kandidat lewat discovery jika preferensi, provider, izin biaya dan kuota siap. Kandidat belum otomatis menjadi pantauan. Instagram, OCR dan AI belum dijalankan otomatis. Pencarian manual memakai alur sebelumnya.',
         'providers':{
-            'discovery':provider(config.discovery_provider_enabled, config.brave_api_key),
+            'discovery':provider(config.discovery_provider_enabled, config.brave_api_key,discovery=True),
             'instagram':provider(config.instagram_provider_enabled, config.apify_token),
             'ocr':{'configured':config.ocr_enabled and shutil.which(config.tesseract_command) is not None},
             'ai':{'configured':False},

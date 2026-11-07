@@ -167,6 +167,10 @@ class JobQueue:
             enabled = json.loads(conn.execute('SELECT data_json FROM automation_settings WHERE singleton=1').fetchone()[0])['enabled']
             if not enabled:
                 raise SourceDisabledError('Otomatisasi dijeda; sumber terjadwal dilewati.')
+            if source['adapter']=='brave_discovery':
+                preference = json.loads(conn.execute('SELECT data_json FROM preferences WHERE singleton=1').fetchone()[0])
+                if not preference.get('discovery_enabled',False):
+                    raise SourceDisabledError('Discovery dijeda pada preferensi; sumber dilewati.')
         active=conn.execute("SELECT enabled FROM sources WHERE id=?", (source["source_id"],)).fetchone()
         if not active or not active["enabled"]:
             raise SourceDisabledError("Sumber dihapus atau dinonaktifkan; pengambilan dilewati.")

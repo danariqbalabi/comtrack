@@ -12,9 +12,11 @@ from .config import get_settings
 from .database import Database
 from .job_queue import JobQueue
 from .repository import encode
+from .models import Preferences
+from .discovery import attach_plan
 
 logger = logging.getLogger(__name__)
-SCHEDULED_ADAPTERS = ('ou_festival_epic', 'public_html', 'rss')
+SCHEDULED_ADAPTERS = ('ou_festival_epic', 'public_html', 'rss', 'brave_discovery')
 
 
 class Scheduler:
@@ -47,23 +49,32 @@ class Scheduler:
             active = conn.execute("SELECT id FROM collection_jobs WHERE status IN ('queued','running')").fetchone()
             if active:
                 return outcome('busy',job_id=active['id'])
+            preferences = Preferences.model_validate_json(conn.execute('SELECT data_json FROM preferences WHERE singleton=1').fetchone()[0])
+            if preferences.discovery_enabled:
+                existing = conn.execute("SELECT 1 FROM sources WHERE kind='website' AND url='https://api.search.brave.com/'").fetchone()
+                if existing is None and conn.execute('SELECT count(*) FROM sources').fetchone()[0]<30:
+                    conn.execute('''INSERT INTO sources(name,kind,url,adapter,created_at,updated_at)
+                        VALUES ('Discovery web','website','https://api.search.brave.com/','brave_discovery',?,?)''',(stamp,stamp))
             placeholders = ','.join('?' for _ in SCHEDULED_ADAPTERS)
             sources = conn.execute(f'''SELECT * FROM sources WHERE enabled=1 AND kind IN ('website','rss')
-                AND adapter IN ({placeholders}) ORDER BY CASE WHEN id>? THEN 0 ELSE 1 END,id LIMIT ?''',
-                (*SCHEDULED_ADAPTERS,schedule['last_source_id'],settings.max_sources_per_run)).fetchall()
+                AND adapter IN ({placeholders}) AND (? OR adapter!='brave_discovery')
+                ORDER BY CASE WHEN id>? THEN 0 ELSE 1 END,id LIMIT ?''',
+                (*SCHEDULED_ADAPTERS,preferences.discovery_enabled,schedule['last_source_id'],settings.max_sources_per_run)).fetchall()
             next_at = (now + timedelta(minutes=settings.interval_minutes)).isoformat(timespec='microseconds')
             if not sources:
                 return outcome('no_sources',next_at=next_at)
             job_id = self.queue._enqueue_sources(conn,sources,requested_at=stamp,automatic=True)
             conn.execute('INSERT INTO automation_job_runs(job_id,settings_version,settings_json,scheduled_for) VALUES (?,?,?,?)',
                          (job_id,row['version'],encode(settings.model_dump(mode='json')),due or stamp))
+            for selected in conn.execute("SELECT id FROM collection_job_sources WHERE job_id=? AND adapter='brave_discovery'",(job_id,)):
+                attach_plan(conn,selected['id'],preferences,now.year)
             conn.execute('''UPDATE automation_schedule SET next_run_at=?,last_enqueued_at=?,last_job_id=?,last_source_id=?
                 WHERE singleton=1''', (next_at,stamp,job_id,sources[-1]['id']))
             return outcome('enqueued',job_id=job_id)
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Scheduler persisten Lomba Radar; website/RSS tanpa provider berbayar')
+    parser = argparse.ArgumentParser(description='Scheduler persisten Lomba Radar; website/RSS dan discovery dengan izin serta kuota')
     parser.add_argument('--once',action='store_true',help='Periksa jadwal satu kali lalu keluar; tidak mengambil web')
     args = parser.parse_args()
     config = get_settings()

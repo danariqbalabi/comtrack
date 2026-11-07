@@ -17,6 +17,7 @@ from .models import EvidenceData
 from .quality.service import ingest
 from .repository import Repository
 from .scheduled_collection import ScheduledPageClient
+from .discovery import DiscoveryBlocked
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ ADAPTERS = {ou_festival.ADAPTER: collect_ou, "public_html": collect_html, "rss":
 
 
 def safe_error(error):
-    if isinstance(error, (FetchError, ou_festival.ExtractionError, SourceNotConnectedError, SourceDisabledError, ProviderUnavailable)):
+    if isinstance(error, (FetchError, ou_festival.ExtractionError, SourceNotConnectedError, SourceDisabledError, ProviderUnavailable, DiscoveryBlocked)):
         return str(error)[:500]
     if type(error) is ValueError:
         return str(error)[:500]
@@ -80,9 +81,14 @@ def execute_job(queue: JobQueue, job_id: int, token: str, *, client=None, adapte
                     if source["source_kind"] == "instagram":
                         raise SourceNotConnectedError("Instagram belum terhubung; adapter/provider belum tersedia.")
                     raise ValueError("Adapter sumber belum didukung: " + source["adapter"])
-                source_client = ScheduledPageClient(source['source_url'],automatic.max_pages_per_source,client,
-                    reserve=lambda:queue.reserve_scheduled_page(job_id,token,source)) if automatic else client
-                extracted = adapter(source, source_client)
+                if automatic and source['adapter']=='brave_discovery':
+                    from .collectors.discovery import collect as discover
+                    source_client = None
+                    extracted = discover(queue,job_id,token,source,client=client)
+                else:
+                    source_client = ScheduledPageClient(source['source_url'],automatic.max_pages_per_source,client,
+                        reserve=lambda:queue.reserve_scheduled_page(job_id,token,source)) if automatic else client
+                    extracted = adapter(source, source_client)
                 if shutdown.is_set():
                     break
                 if lost.is_set():
@@ -107,9 +113,13 @@ def execute_job(queue: JobQueue, job_id: int, token: str, *, client=None, adapte
                 if shutdown.is_set():
                     break
                 result = results[0] if not isinstance(extracted, Batch) else {"inspected":batch.inspected,"competitions":results,"errors":batch.errors}
-                if automatic:
+                if automatic and source_client is not None:
                     result['page_budget'] = {'used':source_client.used,'limit':source_client.limit}
+                if automatic and source['adapter']=='brave_discovery':
+                    result['discovery'] = extracted.activity
                 error = "Sebagian artikel gagal diverifikasi; lihat hasil sumber." if batch.errors else None
+                if batch.errors and automatic and source['adapter']=='brave_discovery':
+                    error = '; '.join(batch.errors)[:500]
                 queue.finish_source(job_id,token,source,result=result,error=error)
             except LostLeaseError:
                 raise  # Stale workers must not record failures or alter new owners' jobs.

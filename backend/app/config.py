@@ -1,8 +1,9 @@
 from functools import lru_cache
 from pathlib import Path
+from decimal import Decimal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -22,6 +23,8 @@ class Settings(BaseSettings):
     scheduler_poll_seconds: float = Field(default=5, ge=1, le=30)
     brave_api_key: SecretStr = SecretStr("")
     discovery_provider_enabled: bool = False
+    brave_cost_per_request_usd: Decimal | None = Field(default=None,gt=0,le=10,decimal_places=6,allow_inf_nan=False)
+
     apify_token: SecretStr = SecretStr("")
     instagram_provider_enabled: bool = False
     instagram_posts_limit: int = Field(default=5, ge=1, le=20)
@@ -32,6 +35,11 @@ class Settings(BaseSettings):
     access_username: str = ""
     access_password: SecretStr = SecretStr("")
     api_allowed_origins: str = "http://127.0.0.1:5173,http://localhost:5173,http://127.0.0.1:8000,http://localhost:8000"
+
+    @field_validator('brave_cost_per_request_usd',mode='before')
+    @classmethod
+    def optional_brave_estimate(cls,value):
+        return None if value=='' else value
 
     @property
     def resolved_database_path(self) -> Path:

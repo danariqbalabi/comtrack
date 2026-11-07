@@ -151,7 +151,7 @@ class AutomationTests(unittest.TestCase):
         repo.save_preferences(preferences)
         saved = repo.create_competition(self.adapter.return_value.data)
         upgraded = Database(path)
-        self.assertEqual(upgraded.migrate(),['004','005'])
+        self.assertEqual(upgraded.migrate(),['004','005','006'])
         self.assertEqual(Repository(upgraded).get_preferences(),preferences)
         self.assertEqual(Repository(upgraded).get_competition(saved.id),saved)
         store = AutomationStore(upgraded)
