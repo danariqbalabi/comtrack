@@ -36,6 +36,7 @@ def evaluate(data: CompetitionData, preferences: Preferences, *, now: datetime |
         raise ValueError("Waktu evaluasi harus menyertakan zona waktu.")
     result = data.model_copy(deep=True)
     reasons = []; uncertain = []
+    uncertain.extend(warning for warning in data.warnings if warning.startswith('[Perlu review ekstraksi]'))
     registration = registration_status(data, now)
     result.registration_status = registration
     asserted = data.registration_status if data.registration_status_origin != "timeline" else "unknown"

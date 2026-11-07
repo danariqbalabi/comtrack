@@ -90,7 +90,24 @@ def execute_job(queue: JobQueue, job_id: int, token: str, *, client=None, adapte
                 else:
                     source_client = ScheduledPageClient(source['source_url'],automatic.max_pages_per_source,client,
                         reserve=lambda:queue.reserve_scheduled_page(job_id,token,source)) if automatic else client
-                    extracted = adapter(source, source_client)
+                    from .extraction import ExtractionContext
+                    extractor = ExtractionContext(queue,job_id,token,source) if automatic else None
+                    can_enrich = extractor and (extractor.config.ai_enabled or extractor.config.ocr_enabled) and source['adapter'] in ('public_html','rss','discovered_article')
+                    try:
+                        extracted = adapter(source, source_client)
+                    except ValueError:
+                        if not can_enrich or not source_client.pages:raise
+                        extracted = Batch()
+                    if can_enrich:
+                        for page in source_client.pages:
+                            original=next((item for item in extracted.items if str(item.data.source_url)==page.url),None)
+                            enriched=extractor.extract(page,original)
+                            if enriched is not None and enriched is not original:
+                                if original is not None:extracted.items.remove(original)
+                                extracted.items.append(enriched)
+                        extracted.errors.extend(extractor.activity['errors'])
+                        if not extracted.items and not extracted.errors:
+                            raise ValueError('Artikel belum dapat diekstrak; periksa struktur dan model lokal.')
                 if shutdown.is_set():
                     break
                 if lost.is_set():
@@ -123,9 +140,11 @@ def execute_job(queue: JobQueue, job_id: int, token: str, *, client=None, adapte
                 result = results[0] if not isinstance(extracted, Batch) else {"inspected":batch.inspected,"competitions":results,"errors":batch.errors}
                 if automatic and source_client is not None:
                     result['page_budget'] = {'used':source_client.used,'limit':source_client.limit}
+                    if can_enrich:result['extraction'] = extractor.activity
                 if automatic and source['adapter']=='brave_discovery':
                     result['discovery'] = extracted.activity
                     result['onboarding'] = onboardings
+                    result['extraction'] = extracted.extraction_activity
                 error = "Sebagian artikel gagal diverifikasi; lihat hasil sumber." if batch.errors else None
                 if batch.errors and automatic and source['adapter']=='brave_discovery':
                     error = '; '.join(batch.errors)[:500]

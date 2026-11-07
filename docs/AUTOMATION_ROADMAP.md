@@ -2,7 +2,7 @@
 
 Disepakati 8 November 2026. Dokumen ini adalah rencana; fitur yang tercantum belum otomatis dianggap tersedia.
 
-Status: tahap 1-4 sudah diimplementasikan. Scheduler menjalankan discovery dan otomatis mendaftarkan URL artikel website yang lolos verifikasi/kualifikasi untuk dipantau pada job berikutnya. Jatah sumber baru persisten, dibatasi snapshot/pengaturan terkini, maksimal 30 sumber, dan tanpa merayapi tautan (0 hop). Kandidat ambigu tetap ditahan dengan alasan. Belum mendaftarkan seluruh domain/daftar artikel secara otomatis. Tanpa key/estimasi tarif/izin/kuota, discovery ditahan dan website lain tetap berjalan. Pengujian Brave memakai fixture karena key belum tersedia. Instagram dan OCR/AI menunggu tahap 5-6; kuota otomatisasi belum membatasi discovery manual versi sebelumnya.
+Status: tahap 1-5 sudah diimplementasikan. Scheduler menjalankan discovery dan otomatis mendaftarkan URL artikel website yang lolos verifikasi/kualifikasi untuk dipantau pada job berikutnya. Jatah sumber baru persisten, dibatasi snapshot/pengaturan terkini, maksimal 30 sumber, dan tanpa merayapi tautan (0 hop). Kandidat ambigu tetap ditahan dengan alasan. Belum mendaftarkan seluruh domain/daftar artikel secara otomatis. Tanpa key/estimasi tarif/izin/kuota, discovery ditahan dan website lain tetap berjalan. Pengujian Brave memakai fixture karena key belum tersedia. AI lokal berbasis kutipan dan OCR opsional masuk alur website terjadwal; Instagram menunggu tahap 6; kuota otomatisasi belum membatasi discovery manual versi sebelumnya.
 
 ## Tujuan dan batas cakupan
 

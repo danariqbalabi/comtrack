@@ -9,11 +9,13 @@ from ..discovery import DiscoveryBlocked,DiscoveryContext,normalize_candidate
 from . import providers
 from .http import FetchError
 from .public import Batch,parse_html
+from ..extraction import ExtractionContext
 
 
 @dataclass
 class DiscoveryBatch(Batch):
     onboarding_keys: dict = field(default_factory=dict)
+    extraction_activity: dict = field(default_factory=dict)
     activity: dict = field(default_factory=lambda:{'queries_requested':0,'queries_reused':0,'candidates':0,'rejected_urls':0,'pages_verified':0})
 
 
@@ -33,6 +35,7 @@ def collect(queue,job_id,token,source,*,client=None):
     if config.brave_cost_per_request_usd is None:
         raise DiscoveryBlocked('Isi BRAVE_COST_PER_REQUEST_USD sesuai estimasi tarif akun sebelum discovery otomatis.')
     context = DiscoveryContext(queue,job_id,token,source)
+    extractor = ExtractionContext(queue,job_id,token,source)
     batch,seen = DiscoveryBatch(),set()
     for index,query in enumerate(context.queries):
         try:
@@ -67,7 +70,11 @@ def collect(queue,job_id,token,source,*,client=None):
                 entry['reason']='Kandidat sosial media; belum diproses otomatis pada tahap 3.'
                 context.candidate(entry); continue
             try:
-                item = parse_html(context.page_client(url,client).get(url))
+                page = context.page_client(url,client).get(url)
+                if extractor.config.ai_enabled or extractor.config.ocr_enabled:
+                    item = extractor.extract(page)
+                else:
+                    item = parse_html(page)
                 entry.update(status='verified' if item else 'irrelevant',checked_at=datetime.now(timezone.utc).isoformat())
                 batch.activity['pages_verified']+=1
                 if item:
@@ -84,4 +91,6 @@ def collect(queue,job_id,token,source,*,client=None):
                     batch.errors.append('Ada struktur artikel kandidat belum didukung.')
             context.candidate(entry)
     batch.inspected = batch.activity['pages_verified']
+    batch.extraction_activity = extractor.activity
+    batch.errors.extend(extractor.activity['errors'])
     return batch
