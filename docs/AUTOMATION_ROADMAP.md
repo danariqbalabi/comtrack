@@ -2,6 +2,8 @@
 
 Disepakati 8 November 2026. Dokumen ini adalah rencana; fitur yang tercantum belum otomatis dianggap tersedia.
 
+Status tahap 1: kontrol otomatisasi dan batas tersimpan sudah diimplementasikan, default nonaktif. Scheduler belum tersedia; status aktif merupakan keinginan yang disimpan untuk tahap berikutnya. Batas baru belum diterapkan pada pencarian manual. Endpoint konfigurasi dan status tidak menghubungi provider. Tahap 2 dan seterusnya belum dikerjakan.
+
 ## Tujuan dan batas cakupan
 
 Pengguna cukup menentukan kategori, profil peserta, dan anggaran. Sistem menemukan kandidat sumber sendiri, membaca informasi lomba, memverifikasi bukti, menggabungkan duplikat, dan memantau perubahan tanpa daftar sumber panjang yang harus dirawat pengguna.

@@ -2,6 +2,18 @@
 
 Radar pribadi untuk hackathon, Business Case Competition (BCC), dan Business Plan Competition (BPC) di Indonesia. Sasaran awal mahasiswa. **Pencarian hanya saat menekan Cari sekarang**; tidak ada scheduler pengambilan berkala.
 
+## Otomatisasi · tahap 1
+
+Tahap 1 roadmap otomatisasi sudah tersedia: buka **Pengaturan → Otomatisasi · Tahap 1**. Simpan pilihan aktif/nonaktif, interval (30 menit–7 hari), batas sumber per pencarian (1–30), sumber baru (0–30 dan tidak melebihi batas sumber), halaman per sumber (1–10), serta gambar per postingan (0–5). Pengaturan Instagram dibatasi ke akun publik media lomba dan penyelenggara, tanpa opsi memperluas ke akun pribadi.
+
+Izin provider berbayar default **nonaktif**, batas request harian **0**, dan anggaran harian **USD 0.00**. Mengizinkan provider berbayar memerlukan batas request dan anggaran positif; anggaran disimpan sebagai desimal maksimal dua angka di belakang titik. Status kesiapan integrasi memeriksa konfigurasi server tanpa memanggil layanan atau menampilkan credential. Status dikonfigurasi tidak menjamin key valid atau kuota tersedia.
+
+**Tahap ini baru menyimpan konfigurasi. Scheduler dan penerapan batas otomatisasi belum tersedia.** Centang aktif akan menampilkan status menunggu scheduler; tidak ada job, pengambilan web, aktivasi provider, atau pengeluaran baru yang dipicu oleh penyimpanan. Pencarian manual tetap memakai alur dan konfigurasi provider sebelumnya; batas baru ini belum membatasi panggilan manual. Scheduler dikerjakan terpisah pada tahap 2.
+
+Konfigurasi tersimpan di tabel `automation_settings`, schema **004**, dan bertahan setelah restart. API `GET /api/automation` membaca konfigurasi beserta status runtime; `PUT /api/automation` menerima `{"settings":{...},"expected_version":1}`. Header mutasi, validasi origin, dan login pribadi mengikuti API lainnya. Penyimpanan dari versi lama menghasilkan HTTP 409 agar perubahan tab/proses lain tidak tertimpa. Pengaturan tidak mengubah preferensi relevansi atau sumber pantauan.
+
+Verifikasi tahap 1: pengujian API/storage mencakup default nonaktif, validasi batas dan anggaran, persistensi/migrasi, konflik penulis, kesiapan integrasi tanpa jaringan, proteksi akses, serta pencarian manual yang tetap berjalan. Roadmap lengkap ada di [docs/AUTOMATION_ROADMAP.md](docs/AUTOMATION_ROADMAP.md).
+
 ## Yang sudah bekerja
 
 - Feed dari SQLite asli: kategori, pencarian nama/penyelenggara, urutan baru ditemukan/deadline, pagination.
@@ -144,7 +156,7 @@ Docker tidak tersedia pada mesin verifikasi saat implementasi: Dockerfile/Compos
 
 Seluruh nilai/flag ada di [.env.example](.env.example). `DATABASE_PATH` default `data/lomba-radar.db`; path relatif dihitung dari root repo. `WORKER_LEASE_SECONDS` 30–3600, `WORKER_POLL_SECONDS` 0.1–30 (poll antrean, bukan jadwal scraping). `API_PROXY_TARGET` untuk Vite development. Jangan menyimpan secret di variabel `VITE_` karena bersifat publik.
 
-Schema terbaru **003**: data lomba, sumber, bukti, riwayat, job/log, snapshot sumber, preferensi, dan kandidat discovery. Startup menerapkan migrasi SQL berurutan dengan checksum tanpa menghapus data lama. Jangan mengubah file migrasi yang sudah diterapkan. SQLite memakai WAL, foreign key, transaksi dan disk lokal; bukan network share.
+Schema terbaru **004**: data lomba, sumber, bukti, riwayat, job/log, snapshot sumber, preferensi, kandidat discovery, dan konfigurasi otomatisasi. Startup menerapkan migrasi SQL berurutan dengan checksum tanpa menghapus data lama. Jangan mengubah file migrasi yang sudah diterapkan. SQLite memakai WAL, foreign key, transaksi dan disk lokal; bukan network share.
 
 ```powershell
 .\.venv\Scripts\python.exe -m backend.app.database migrate

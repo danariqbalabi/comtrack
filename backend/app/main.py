@@ -12,6 +12,7 @@ from .database import Database, MigrationError
 from .jobs_api import router as jobs_router
 from .feed_api import router as feed_router
 from .settings_api import router as settings_router
+from .automation_api import router as automation_router
 from .security import protect_writes
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,7 @@ app = FastAPI(
 app.include_router(jobs_router)
 app.include_router(feed_router)
 app.include_router(settings_router)
+app.include_router(automation_router)
 app.middleware("http")(protect_writes)
 
 
