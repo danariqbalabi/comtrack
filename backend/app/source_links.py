@@ -4,6 +4,7 @@ import re
 from dataclasses import replace
 from urllib.parse import urljoin,urlsplit
 from bs4 import BeautifulSoup
+from pydantic import HttpUrl
 from .collectors.http import public_url,FetchError
 
 
@@ -25,7 +26,7 @@ def attach(item,page):
     data=item.data.model_copy(deep=True);fields=dict(item.field_values);raw=item.raw_text
     for field,urls in matches.items():
         if len(urls)==1 and getattr(data,field) is None:
-            setattr(data,field,urls[0]);fields[field]=urls[0];raw+='\n'+field+': '+urls[0]
+            setattr(data,field,HttpUrl(urls[0]));fields[field]=urls[0];raw+='\n'+field+': '+urls[0]
         elif len(urls)>1:
             data.warnings.append('[Perlu review ekstraksi] Beberapa tautan '+field+' berbeda pada artikel.')
     return replace(item,data=data,field_values=fields,raw_text=raw,content_hash=hashlib.sha256(raw.encode()).hexdigest())
@@ -41,5 +42,5 @@ def attach_caption(item):
             except (ValueError,FetchError):continue
             if urlsplit(url).path.rstrip('/') and url not in urls:urls.append(url)
     if len(urls)!=1:return item
-    data=item.data.model_copy(update={'registration_url':urls[0]})
+    data=item.data.model_copy(update={'registration_url':HttpUrl(urls[0])})
     return replace(item,data=data,field_values={**item.field_values,'registration_url':urls[0]})

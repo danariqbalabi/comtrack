@@ -86,9 +86,10 @@ def deadlines(response:Response,days:int=Query(7,ge=1,le=30),limit:int=Query(30,
     items=[]
     for record in visible_competitions(repository,now=now):
         for entry in record.data.timeline:
-            if entry.kind!='registration' or deadline_passed(entry,now) is not False or not entry.date or entry.date>end:continue
+            date=entry.date or (entry.at.date() if entry.at else None)
+            if entry.kind!='registration' or deadline_passed(entry,now) is not False or not date or date>end:continue
             items.append({'competition_id':record.id,'name':record.data.name,'category':record.data.category,
-                'date':entry.date.isoformat(),'at':entry.at.isoformat() if entry.at else None,'timezone':entry.timezone,
+                'date':date.isoformat(),'at':entry.at.isoformat() if entry.at else None,'timezone':entry.timezone,
                 'label':entry.label,'relevance_status':record.data.relevance_status,'source_url':str(record.data.source_url)})
     items.sort(key=lambda item:(item['date'],item['competition_id']))
     return {'items':items[:limit],'total':len(items),'days':days}

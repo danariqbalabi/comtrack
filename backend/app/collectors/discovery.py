@@ -36,6 +36,7 @@ def collect(queue,job_id,token,source,*,client=None):
         raise DiscoveryBlocked('Isi BRAVE_COST_PER_REQUEST_USD sesuai estimasi tarif akun sebelum discovery otomatis.')
     context = DiscoveryContext(queue,job_id,token,source)
     extractor = ExtractionContext(queue,job_id,token,source)
+    automatic = queue.automation_settings(job_id) is not None
     batch,seen = DiscoveryBatch(),set()
     for index,query in enumerate(context.queries):
         try:
@@ -68,7 +69,7 @@ def collect(queue,job_id,token,source,*,client=None):
             batch.activity['candidates']+=1
             if domain in ('instagram.com','facebook.com','tiktok.com','x.com','twitter.com','youtube.com'):
                 entry['reason']='Kandidat sosial media; bukan bukti fakta lomba.'
-                if domain=='instagram.com':
+                if domain=='instagram.com' and automatic:
                     from ..instagram import consider
                     try:
                         _,entry['reason']=consider(extractor,url,url)
@@ -78,7 +79,7 @@ def collect(queue,job_id,token,source,*,client=None):
             try:
                 page = context.page_client(url,client).get(url)
                 from ..instagram import discover_links
-                discover_links(extractor,page)
+                if automatic:discover_links(extractor,page)
                 if extractor.config.ai_enabled or extractor.config.ocr_enabled:
                     item = extractor.extract(page)
                 else:

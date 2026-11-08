@@ -108,7 +108,9 @@ class ExtractionTests(unittest.TestCase):
         self.assertIn('[Perlu review ekstraksi]',str(saved.data.warnings))
 
     def test_provider_contract_is_local_fixed_and_bounded(self):
-        connection=Mock();response=Mock(status=200);response.read.return_value=json.dumps({'done':True,'response':OUTPUT.model_dump_json()}).encode();connection.getresponse.return_value=response
+        connection=Mock();response=Mock(status=200);response.read.return_value=json.dumps({'done':True,'response':OUTPUT.model_dump_json()}).encode()
+        metadata=Mock(status=200);metadata.read.return_value=json.dumps({'model_info':{'general.architecture':'fixture'}}).encode()
+        connection.getresponse.side_effect=[metadata,response]
         with patch.object(extraction.http.client,'HTTPConnection',return_value=connection) as http:
             self.assertEqual(extraction.generate(TEXT,self.config),OUTPUT)
         self.assertEqual(http.call_args.args,('127.0.0.1',11434))
@@ -117,6 +119,15 @@ class ExtractionTests(unittest.TestCase):
         self.assertFalse(payload['stream']);self.assertEqual(payload['options']['num_predict'],2048)
         self.assertIn('untrusted',payload['system'])
         self.assertNotIn('tools',payload)
+
+    def test_remote_alias_is_rejected_before_model_generation(self):
+        connection=Mock();response=Mock(status=200)
+        response.read.return_value=json.dumps({'remote_model':'cloud-model','remote_host':'https://ollama.com','model_info':{}}).encode()
+        connection.getresponse.return_value=response
+        with patch.object(extraction.http.client,'HTTPConnection',return_value=connection),self.assertRaises(ValueError):
+            extraction.generate(TEXT,self.config)
+        connection.request.assert_called_once()
+        self.assertEqual(connection.request.call_args.args[1],'/api/show')
 
     def test_cloud_model_is_not_accepted(self):
         with self.assertRaises(ValueError):Settings(_env_file=None,ai_model='some-model:cloud')

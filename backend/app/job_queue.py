@@ -57,6 +57,9 @@ class JobQueue:
                     lease_expires_at=NULL,summary_json=? WHERE id=?""", (utc_now(), encode({"error":message}), job["id"]))
                 conn.execute("""UPDATE collection_job_sources SET status='failed',finished_at=?,error=?
                     WHERE job_id=? AND status IN ('pending','running')""", (utc_now(), message, job["id"]))
+                from .source_health import record
+                for failed_source in conn.execute("SELECT * FROM collection_job_sources WHERE job_id=? AND status='failed'",(job['id'],)).fetchall():
+                    record(conn,failed_source,None,message)
                 self._log(conn, job["id"], message, level="error")
 
     def recover(self):
@@ -73,7 +76,7 @@ class JobQueue:
                 return active["id"], False
             if source_ids is None:
                 discovery = json.loads(conn.execute("SELECT data_json FROM preferences WHERE singleton=1").fetchone()[0]).get("discovery_enabled", False)
-                if discovery:
+                if discovery and (conn.execute("SELECT 1 FROM sources WHERE kind='website' AND url='https://api.search.brave.com/'").fetchone() or conn.execute('SELECT count(*) FROM sources').fetchone()[0]<30):
                     stamp = utc_now()
                     conn.execute("""INSERT INTO sources(name,kind,url,adapter,created_at,updated_at)
                         VALUES ('Discovery web','website','https://api.search.brave.com/','brave_discovery',?,?)
@@ -101,6 +104,14 @@ class JobQueue:
             conn.execute('''INSERT INTO collection_job_sources
                 (job_id,source_id,source_name,source_url,source_kind,adapter,config_json) VALUES (?,?,?,?,?,?,?)''',
                 (job_id,source['id'],source['name'],source['url'],source['kind'],source['adapter'],source['config_json']))
+        if not automatic:
+            settings_json=conn.execute('SELECT data_json FROM automation_settings WHERE singleton=1').fetchone()[0]
+            conn.execute('INSERT INTO manual_job_limits(job_id,settings_json) VALUES (?,?)',(job_id,settings_json))
+            from .discovery import attach_plan
+            from .models import Preferences
+            preferences=Preferences.model_validate_json(conn.execute('SELECT data_json FROM preferences WHERE singleton=1').fetchone()[0])
+            for selected in conn.execute("SELECT id FROM collection_job_sources WHERE job_id=? AND adapter='brave_discovery'",(job_id,)):
+                attach_plan(conn,selected['id'],preferences,datetime.now(timezone.utc).year)
         self._log(conn,job_id,'Permintaan otomatis terjadwal masuk antrean; menunggu worker.' if automatic else 'Permintaan manual masuk antrean; menunggu worker.')
         return job_id
 
@@ -110,12 +121,18 @@ class JobQueue:
             row = conn.execute('SELECT settings_json FROM automation_job_runs WHERE job_id=?', (job_id,)).fetchone()
             return AutomationSettings.model_validate_json(row['settings_json']) if row else None
 
+    def collection_settings(self,job_id):
+        from .automation import AutomationSettings
+        with self.database.connection() as conn:
+            row=conn.execute('SELECT settings_json FROM automation_job_runs WHERE job_id=? UNION ALL SELECT settings_json FROM manual_job_limits WHERE job_id=? LIMIT 1',(job_id,job_id)).fetchone()
+            return AutomationSettings.model_validate_json(row[0]) if row else None
+
     def reserve_scheduled_page(self, job_id, token, source):
         from .automation import AutomationSettings
         from .collectors.http import FetchError
         with self.database.transaction() as conn:
             self.source_guard(conn,job_id,token,source)
-            row = conn.execute('SELECT settings_json FROM automation_job_runs WHERE job_id=?',(job_id,)).fetchone()
+            row = conn.execute('SELECT settings_json FROM automation_job_runs WHERE job_id=? UNION ALL SELECT settings_json FROM manual_job_limits WHERE job_id=? LIMIT 1',(job_id,job_id)).fetchone()
             current = AutomationSettings.model_validate_json(conn.execute('SELECT data_json FROM automation_settings WHERE singleton=1').fetchone()[0])
             limit = min(AutomationSettings.model_validate_json(row['settings_json']).max_pages_per_source,current.max_pages_per_source) if row else current.max_pages_per_source
             usage = conn.execute('SELECT pages_used FROM automation_source_usage WHERE job_source_id=?',(source['id'],)).fetchone()
@@ -162,6 +179,8 @@ class JobQueue:
 
     def source_guard(self, conn, job_id, token, source):
         self.assert_lease(conn,job_id,token)
+        if source['adapter']=='brave_discovery' and not json.loads(conn.execute('SELECT data_json FROM preferences WHERE singleton=1').fetchone()[0]).get('discovery_enabled',False):
+            raise SourceDisabledError('Discovery dijeda pada preferensi; sumber dilewati.')
         if conn.execute('SELECT 1 FROM automation_job_runs WHERE job_id=?', (job_id,)).fetchone():
             enabled = json.loads(conn.execute('SELECT data_json FROM automation_settings WHERE singleton=1').fetchone()[0])['enabled']
             if not enabled:

@@ -54,6 +54,8 @@ def execute_job(queue: JobQueue, job_id: int, token: str, *, client=None, adapte
     done = threading.Event(); lost = threading.Event()
     errors = []
     automatic = queue.automation_settings(job_id)
+    from .automation import AutomationStore
+    collection_limits = queue.collection_settings(job_id) or AutomationStore(queue.database).get()['settings']
 
     def heartbeat():
         while not done.wait(min(10, queue.lease_seconds / 3)):
@@ -83,7 +85,7 @@ def execute_job(queue: JobQueue, job_id: int, token: str, *, client=None, adapte
                     if source["source_kind"] == "instagram":
                         raise SourceNotConnectedError("Instagram belum terhubung; adapter/provider belum tersedia.")
                     raise ValueError("Adapter sumber belum didukung: " + source["adapter"])
-                if automatic and source['adapter']=='brave_discovery':
+                if source['adapter']=='brave_discovery':
                     from .collectors.discovery import collect as discover
                     source_client = None
                     extracted = discover(queue,job_id,token,source,client=client)
@@ -92,15 +94,15 @@ def execute_job(queue: JobQueue, job_id: int, token: str, *, client=None, adapte
                     source_client = None
                     extracted = collect_account(queue,job_id,token,source)
                 else:
-                    source_client = ScheduledPageClient(source['source_url'],automatic.max_pages_per_source,client,
-                        reserve=lambda:queue.reserve_scheduled_page(job_id,token,source)) if automatic else client
+                    source_client = ScheduledPageClient(source['source_url'],collection_limits.max_pages_per_source,client,
+                        reserve=lambda:queue.reserve_scheduled_page(job_id,token,source))
                     from .extraction import ExtractionContext
-                    extractor = ExtractionContext(queue,job_id,token,source) if automatic else None
+                    extractor = ExtractionContext(queue,job_id,token,source)
                     can_enrich = extractor and (extractor.config.ai_enabled or extractor.config.ocr_enabled) and source['adapter'] in ('public_html','rss','discovered_article')
                     try:
                         extracted = adapter(source, source_client)
-                    except ValueError:
-                        if not can_enrich or not source_client.pages:raise
+                    except ValueError as error:
+                        if not can_enrich or not source_client.pages or str(error).startswith(('Identitas halaman sumber berubah','Selector CSS tidak valid')):raise
                         extracted = Batch()
                     if can_enrich:
                         for page in source_client.pages:
@@ -124,7 +126,7 @@ def execute_job(queue: JobQueue, job_id: int, token: str, *, client=None, adapte
                 for item in batch.items:
                     if shutdown.is_set():
                         break
-                    if source_client is not None and automatic:
+                    if source_client is not None:
                         page=next((page for page in source_client.pages if page.url==str(item.data.source_url)),None)
                         if page is not None:
                             from .source_links import attach
@@ -147,15 +149,15 @@ def execute_job(queue: JobQueue, job_id: int, token: str, *, client=None, adapte
                 if shutdown.is_set():
                     break
                 result = results[0] if not isinstance(extracted, Batch) else {"inspected":batch.inspected,"competitions":results,"errors":batch.errors}
-                if automatic and source_client is not None:
+                if source_client is not None:
                     result['page_budget'] = {'used':source_client.used,'limit':source_client.limit}
                     if can_enrich:result['extraction'] = extractor.activity
-                if automatic and source['adapter']=='brave_discovery':
+                if source['adapter']=='brave_discovery':
                     result['discovery'] = extracted.activity
                     result['onboarding'] = onboardings
                     result['extraction'] = extracted.extraction_activity
                 error = "Sebagian artikel gagal diverifikasi; lihat hasil sumber." if batch.errors else None
-                if batch.errors and automatic and source['adapter']=='brave_discovery':
+                if batch.errors and source['adapter']=='brave_discovery':
                     error = '; '.join(batch.errors)[:500]
                 queue.finish_source(job_id,token,source,result=result,error=error)
             except LostLeaseError:

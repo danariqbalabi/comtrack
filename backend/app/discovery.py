@@ -67,7 +67,7 @@ class DiscoveryContext:
             if row is None:
                 raise DiscoveryBlocked('Job discovery tidak memiliki rencana pencarian tersimpan.')
             self.queries = json.loads(row['queries_json'])
-        self.snapshot = queue.automation_settings(job_id)
+        self.snapshot = queue.collection_settings(job_id)
         if self.snapshot is None:
             raise DiscoveryBlocked('Rencana discovery otomatis memerlukan snapshot konfigurasi job.')
 

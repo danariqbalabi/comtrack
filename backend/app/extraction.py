@@ -33,6 +33,12 @@ def generate(text,config):
         'prompt':json.dumps({'untrusted_source_text':text},ensure_ascii=False),
         'options':{'temperature':0,'num_predict':2048,'num_ctx':8192},'keep_alive':'5m'}
     try:
+        connection.request('POST','/api/show',body=encode({'model':config.ai_model,'verbose':False}).encode(),headers={'Content-Type':'application/json'})
+        response=connection.getresponse();raw=response.read(128*1024+1)
+        if response.status!=200 or len(raw)>128*1024:raise ValueError('Metadata model lokal tidak tersedia.')
+        details=json.loads(raw)
+        if not isinstance(details,dict) or details.get('remote_host') or details.get('remote_model') or not isinstance(details.get('model_info'),dict) or not details['model_info']:
+            raise ValueError('Model harus memiliki metadata bobot lokal; model remote/cloud tidak dipanggil.')
         connection.request('POST','/api/generate',body=encode(payload).encode(),headers={'Content-Type':'application/json'})
         response=connection.getresponse();raw=response.read(128*1024+1)
         if response.status!=200 or len(raw)>128*1024:raise ValueError('Model lokal gagal atau respons terlalu besar.')
@@ -50,6 +56,7 @@ class ExtractionContext:
         self.queue,self.job_id,self.token,self.source=queue,job_id,token,source
         self.config=get_settings()
         self.snapshot=queue.automation_settings(job_id)
+        self.limits=queue.collection_settings(job_id)
         self.activity={'ai_requests':0,'ai_cache_hits':0,'ocr_images':0,'errors':[]}
 
     def guard(self,conn):
@@ -67,7 +74,7 @@ class ExtractionContext:
                 used=conn.execute("SELECT count(*) FROM extraction_attempts WHERE job_source_id=? AND document_url=? AND kind='ocr'",(self.source['id'],document_url)).fetchone()[0]
                 from .automation import AutomationSettings
                 current=AutomationSettings.model_validate_json(conn.execute('SELECT data_json FROM automation_settings WHERE singleton=1').fetchone()[0])
-                limit=min(self.snapshot.max_images_per_post,current.max_images_per_post) if self.snapshot else current.max_images_per_post
+                limit=min(self.limits.max_images_per_post,current.max_images_per_post) if self.limits else current.max_images_per_post
             if used>=limit:return False
             conn.execute('INSERT INTO extraction_attempts(job_id,job_source_id,cache_key,kind,document_url,status,created_at) VALUES (?,?,?,?,?,\'reserved\',?)',
                          (self.job_id,self.source['id'],key,kind,document_url,utc_now()))

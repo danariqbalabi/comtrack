@@ -66,6 +66,8 @@ def merge(previous: CompetitionData | None, incoming: CompetitionData, evidence:
                 return fields
             return normalize(value) if field in ("name", "organizer", "edition") and isinstance(value, str) else value
         equivalent = semantic(old) == semantic(new)
+        if field == 'summary' and known(old) and known(new) and not same_source:
+            return old  # Different article descriptions are not conflicting competition facts.
         if equivalent:
             # Agreement from the formerly conflicting source resolves that conflict without deleting it.
             for item in conflicts:

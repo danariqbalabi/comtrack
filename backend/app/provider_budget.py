@@ -21,7 +21,7 @@ def apify_run(context,action,actor,payload,limit,sanitize):
     config=context.config
     if not config.instagram_provider_enabled or not config.apify_token.get_secret_value():
         raise providers.ProviderUnavailable('Instagram belum terhubung: atur APIFY_TOKEN dan INSTAGRAM_PROVIDER_ENABLED.')
-    snapshot=context.snapshot or AutomationStore(context.queue.database).get()['settings']
+    snapshot=context.queue.collection_settings(context.job_id) or AutomationStore(context.queue.database).get()['settings']
     day=datetime.now(timezone.utc).date().isoformat()
     cost=int((Decimal(str(config.apify_max_charge_usd))*MICRO_USD).to_integral_value(rounding=ROUND_CEILING))
     with context.queue.database.transaction() as conn:

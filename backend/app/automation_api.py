@@ -25,12 +25,12 @@ def present(snapshot, schedule):
     heartbeat = schedule['last_tick_at']
     fresh = bool(heartbeat and (datetime.now(timezone.utc)-datetime.fromisoformat(heartbeat)).total_seconds() <= max(30,config.scheduler_poll_seconds*3))
     return {**snapshot, 'runtime':{
-        'stage':8, 'scheduler_available':True, 'scheduler_online':fresh, 'running':settings.enabled and fresh,
+        'stage':9, 'scheduler_available':True, 'scheduler_online':fresh, 'running':settings.enabled and fresh,
         'state':('waiting_scheduler' if not fresh else schedule['last_status']) if settings.enabled else 'disabled',
         'limits_enforced':True, 'enforced_limits':['max_sources_per_run','max_new_sources_per_run','max_pages_per_source','max_images_per_post','provider_daily_request_limit','provider_daily_budget_usd'],
         'next_run_at':schedule['next_run_at'], 'last_tick_at':heartbeat,
         'last_enqueued_at':schedule['last_enqueued_at'], 'last_job_id':schedule['last_job_id'],
-        'message':'Scheduler memantau website/RSS dan dapat mencari kandidat lewat discovery jika preferensi, provider, izin biaya dan kuota siap. Artikel website yang lolos kualifikasi menjadi pantauan dalam batas sumber baru. AI lokal/OCR opsional membantu artikel yang belum lengkap. Instagram hanya untuk profil publik yang lolos klasifikasi bio. Pencarian manual memakai alur sebelumnya.',
+        'message':'Scheduler memantau website/RSS dan dapat mencari kandidat lewat discovery jika preferensi, provider, izin biaya dan kuota siap. Artikel website yang lolos kualifikasi menjadi pantauan dalam batas sumber baru. AI lokal/OCR opsional membantu artikel yang belum lengkap. Instagram hanya untuk profil publik yang lolos klasifikasi bio. Pencarian manual berbagi kuota harian provider dan tetap dapat dijalankan saat otomatisasi dijeda.',
         'providers':{
             'discovery':provider(config.discovery_provider_enabled, config.brave_api_key,discovery=True),
             'instagram':provider(config.instagram_provider_enabled, config.apify_token),

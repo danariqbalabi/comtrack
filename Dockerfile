@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends tesseract-ocr t
 COPY backend/requirements.txt backend/requirements.txt
 RUN pip install --no-cache-dir -r backend/requirements.txt
 COPY backend/ backend/
-COPY scripts/healthcheck.py scripts/healthcheck.py
+COPY scripts/ scripts/
 COPY --from=frontend /build/frontend/dist/ frontend/dist/
 RUN useradd --uid 10001 --create-home radar && mkdir -p /app/data && chown radar:radar /app/data
 USER radar

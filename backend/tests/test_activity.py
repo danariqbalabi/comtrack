@@ -76,6 +76,12 @@ class ActivityTests(unittest.TestCase):
         self.assertEqual(status,200);self.assertEqual(body['items'][0]['changes']['fees']['before'],[])
         self.assertEqual(self.request('GET','/api/automation/changes?offset=1')[1]['items'],[])
 
+    def test_precise_timestamp_without_separate_date_is_still_a_deadline(self):
+        at=datetime.now(timezone.utc)+timedelta(days=2)
+        record=self.competition(2,timeline=[TimelineEntry(kind='registration',raw_text='Pendaftaran '+at.isoformat(),at=at,needs_review=False)])
+        body=self.request('GET','/api/automation/deadlines')[1]
+        self.assertEqual(body['items'][0]['competition_id'],record.id)
+
     def test_endpoints_validate_bounds(self):
         for path in ('runs?offset=-1','runs?limit=31','changes?limit=101','deadlines?days=31','deadlines?limit=101'):
             with self.subTest(path=path):self.assertEqual(self.request('GET','/api/automation/'+path)[0],422)
