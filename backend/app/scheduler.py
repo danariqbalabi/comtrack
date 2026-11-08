@@ -16,7 +16,7 @@ from .models import Preferences
 from .discovery import attach_plan
 
 logger = logging.getLogger(__name__)
-SCHEDULED_ADAPTERS = ('ou_festival_epic', 'public_html', 'rss', 'brave_discovery', 'discovered_article')
+SCHEDULED_ADAPTERS = ('ou_festival_epic', 'public_html', 'rss', 'brave_discovery', 'discovered_article', 'instagram_provider')
 
 
 class Scheduler:
@@ -56,7 +56,7 @@ class Scheduler:
                     conn.execute('''INSERT INTO sources(name,kind,url,adapter,created_at,updated_at)
                         VALUES ('Discovery web','website','https://api.search.brave.com/','brave_discovery',?,?)''',(stamp,stamp))
             placeholders = ','.join('?' for _ in SCHEDULED_ADAPTERS)
-            sources = conn.execute(f'''SELECT * FROM sources WHERE enabled=1 AND kind IN ('website','rss')
+            sources = conn.execute(f'''SELECT * FROM sources WHERE enabled=1 AND kind IN ('website','rss','instagram')
                 AND adapter IN ({placeholders}) AND (? OR adapter!='brave_discovery')
                 ORDER BY CASE WHEN id>? THEN 0 ELSE 1 END,id LIMIT ?''',
                 (*SCHEDULED_ADAPTERS,preferences.discovery_enabled,schedule['last_source_id'],settings.max_sources_per_run)).fetchall()

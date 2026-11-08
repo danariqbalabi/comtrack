@@ -25,13 +25,14 @@ def query_pool(preferences: Preferences, year: int):
     participant = 'mahasiswa' if preferences.education_level=='university' else 'peserta'
     english = 'university students' if preferences.education_level=='university' else 'participants'
     queries = []
-    for variant in range(4):
+    for variant in range(5):
         for category in categories:
             indonesian,international = labels[category]
             query = [f'{indonesian} Indonesia {participant} pendaftaran {year}',
                      f'{international} Indonesia {english} registration {year}',
                      f'{indonesian} {participant} pendaftaran site:ac.id {year}',
-                     f'info lomba {international} Indonesia deadline {year}'][variant]
+                     f'info lomba {international} Indonesia deadline {year}',
+                     f'info lomba {international} Indonesia {participant} site:instagram.com {year}'][variant]
             queries.append(query)
     return queries
 
@@ -96,7 +97,8 @@ class DiscoveryContext:
             reserved = int(cost*MICRO_USD)
             if reserved<=0:
                 raise DiscoveryBlocked('Estimasi biaya request belum valid.')
-            count,total = conn.execute('SELECT count(*),COALESCE(sum(reserved_microusd),0) FROM provider_request_reservations WHERE day_utc=?',(day,)).fetchone()
+            from .provider_budget import daily_usage
+            count,total = daily_usage(conn,day)
             if count>=allowance or Decimal(total+reserved)>budget:
                 raise DiscoveryBlocked('Batas request atau anggaran estimasi harian discovery telah tercapai (UTC).')
             conn.execute('''INSERT INTO provider_request_reservations

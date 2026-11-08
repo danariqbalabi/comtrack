@@ -116,9 +116,8 @@ class JobQueue:
         with self.database.transaction() as conn:
             self.source_guard(conn,job_id,token,source)
             row = conn.execute('SELECT settings_json FROM automation_job_runs WHERE job_id=?',(job_id,)).fetchone()
-            if row is None:
-                raise ValueError('Reservasi halaman hanya untuk job terjadwal.')
-            limit = AutomationSettings.model_validate_json(row['settings_json']).max_pages_per_source
+            current = AutomationSettings.model_validate_json(conn.execute('SELECT data_json FROM automation_settings WHERE singleton=1').fetchone()[0])
+            limit = min(AutomationSettings.model_validate_json(row['settings_json']).max_pages_per_source,current.max_pages_per_source) if row else current.max_pages_per_source
             usage = conn.execute('SELECT pages_used FROM automation_source_usage WHERE job_source_id=?',(source['id'],)).fetchone()
             used = usage['pages_used'] if usage else 0
             if used >= limit:

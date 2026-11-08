@@ -20,7 +20,8 @@ def summary(repository):
     preferences = repository.get_preferences()
     day = datetime.now(timezone.utc).date().isoformat()
     with repository.database.connection() as conn:
-        count,amount = conn.execute('SELECT count(*),COALESCE(sum(reserved_microusd),0) FROM provider_request_reservations WHERE day_utc=?',(day,)).fetchone()
+        from .provider_budget import daily_usage
+        count,amount = daily_usage(conn,day)
         last = conn.execute('''SELECT p.queries_json,s.job_id,s.status,s.error,s.result_json FROM discovery_plans p
             JOIN collection_job_sources s ON s.id=p.job_source_id ORDER BY s.job_id DESC LIMIT 1''').fetchone()
         total = conn.execute('SELECT count(*) FROM discovery_candidates').fetchone()[0]

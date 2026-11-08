@@ -100,9 +100,9 @@ class SchedulerTests(unittest.TestCase):
         self.assertEqual(self.tick(later)['state'],'waiting')
         self.assertEqual(AutomationStore(self.database).schedule()['next_run_at'],(later+timedelta(minutes=30)).isoformat(timespec='microseconds'))
 
-    def test_source_cap_rotation_and_provider_exclusion_even_with_paid_intent(self):
+    def test_source_cap_rotation_includes_instagram_but_excludes_discovery_without_preference(self):
         extra = self.repo.create_source(SourceData(name='Free',kind='website',url='https://example.com/',adapter='public_html'))
-        self.repo.create_source(SourceData(name='IG',kind='instagram',url='https://www.instagram.com/fixture/',adapter='instagram_provider'))
+        instagram = self.repo.create_source(SourceData(name='IG',kind='instagram',url='https://www.instagram.com/fixture/',adapter='instagram_provider'))
         self.repo.create_source(SourceData(name='Brave',kind='website',url='https://api.search.brave.com/',adapter='brave_discovery'))
         self.enable(interval_minutes=30,max_sources_per_run=1,max_new_sources_per_run=0,
                     allow_paid_providers=True,provider_daily_request_limit=10,provider_daily_budget_usd='1.00')
@@ -113,7 +113,7 @@ class SchedulerTests(unittest.TestCase):
         self.assertEqual([row['source_id'] for row in self.queue.pending_sources(second)],[extra.id])
         self.complete(second)
         third = self.tick(self.now+timedelta(minutes=60))['job_id']
-        self.assertEqual([row['source_id'] for row in self.queue.pending_sources(third)],[self.source.id])
+        self.assertEqual([row['source_id'] for row in self.queue.pending_sources(third)],[instagram.id])
 
     def test_no_eligible_sources_preserves_clear_status_and_waits_for_interval(self):
         self.repo.set_source_enabled(self.source.id,False)
@@ -264,7 +264,7 @@ class SchedulerTests(unittest.TestCase):
         with old.transaction() as conn:
             conn.execute("UPDATE automation_settings SET data_json=json_set(data_json,'$.enabled',json('true'))")
         upgraded = Database(path)
-        self.assertEqual(upgraded.migrate(),['005','006','007','008'])
+        self.assertEqual(upgraded.migrate(),['005','006','007','008','009'])
         self.assertEqual(Repository(upgraded).get_competition(saved.id),saved)
         self.assertEqual(JobQueue(upgraded).get(job_id)['logs'][0]['message'],'Kept')
         self.assertTrue(AutomationStore(upgraded).get()['settings'].enabled)

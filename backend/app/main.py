@@ -14,6 +14,7 @@ from .feed_api import router as feed_router
 from .settings_api import router as settings_router
 from .automation_api import router as automation_router
 from .discovery_api import router as discovery_router
+from .instagram_api import router as instagram_router
 from .security import protect_writes
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,7 @@ app.include_router(feed_router)
 app.include_router(settings_router)
 app.include_router(automation_router)
 app.include_router(discovery_router)
+app.include_router(instagram_router)
 app.middleware("http")(protect_writes)
 
 

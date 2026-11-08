@@ -76,7 +76,7 @@ def execute_job(queue: JobQueue, job_id: int, token: str, *, client=None, adapte
                 queue.start_source(job_id, token, source)
                 if automatic:
                     from .scheduler import SCHEDULED_ADAPTERS
-                    if source['adapter'] not in SCHEDULED_ADAPTERS or source['source_kind'] not in ('website','rss'):
+                    if source['adapter'] not in SCHEDULED_ADAPTERS or source['source_kind'] not in ('website','rss','instagram'):
                         raise SourceDisabledError('Adapter ini belum diizinkan untuk otomatisasi tahap 2.')
                 adapter = adapters.get(source["adapter"])
                 if adapter is None:
@@ -87,6 +87,10 @@ def execute_job(queue: JobQueue, job_id: int, token: str, *, client=None, adapte
                     from .collectors.discovery import collect as discover
                     source_client = None
                     extracted = discover(queue,job_id,token,source,client=client)
+                elif source['adapter']=='instagram_provider':
+                    from .instagram import collect as collect_account
+                    source_client = None
+                    extracted = collect_account(queue,job_id,token,source)
                 else:
                     source_client = ScheduledPageClient(source['source_url'],automatic.max_pages_per_source,client,
                         reserve=lambda:queue.reserve_scheduled_page(job_id,token,source)) if automatic else client

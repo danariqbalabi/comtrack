@@ -67,10 +67,18 @@ def collect(queue,job_id,token,source,*,client=None):
             context.candidate(entry)
             batch.activity['candidates']+=1
             if domain in ('instagram.com','facebook.com','tiktok.com','x.com','twitter.com','youtube.com'):
-                entry['reason']='Kandidat sosial media; belum diproses otomatis pada tahap 3.'
+                entry['reason']='Kandidat sosial media; bukan bukti fakta lomba.'
+                if domain=='instagram.com':
+                    from ..instagram import consider
+                    try:
+                        _,entry['reason']=consider(extractor,url,url)
+                    except (ValueError,FetchError):
+                        entry['reason']='URL Instagram bukan profil akun yang dapat diklasifikasikan.'
                 context.candidate(entry); continue
             try:
                 page = context.page_client(url,client).get(url)
+                from ..instagram import discover_links
+                discover_links(extractor,page)
                 if extractor.config.ai_enabled or extractor.config.ocr_enabled:
                     item = extractor.extract(page)
                 else:

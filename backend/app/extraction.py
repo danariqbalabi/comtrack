@@ -67,7 +67,7 @@ class ExtractionContext:
                 used=conn.execute("SELECT count(*) FROM extraction_attempts WHERE job_source_id=? AND document_url=? AND kind='ocr'",(self.source['id'],document_url)).fetchone()[0]
                 from .automation import AutomationSettings
                 current=AutomationSettings.model_validate_json(conn.execute('SELECT data_json FROM automation_settings WHERE singleton=1').fetchone()[0])
-                limit=min(self.snapshot.max_images_per_post,current.max_images_per_post) if self.snapshot else 0
+                limit=min(self.snapshot.max_images_per_post,current.max_images_per_post) if self.snapshot else current.max_images_per_post
             if used>=limit:return False
             conn.execute('INSERT INTO extraction_attempts(job_id,job_source_id,cache_key,kind,document_url,status,created_at) VALUES (?,?,?,?,?,\'reserved\',?)',
                          (self.job_id,self.source['id'],key,kind,document_url,utc_now()))
