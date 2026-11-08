@@ -3,6 +3,7 @@ import { api, dateTime, safeLink } from './api'
 import AutomationSettings from './AutomationSettings'
 import DiscoveryStatus from './DiscoveryStatus'
 import InstagramStatus from './InstagramStatus'
+import AutomationActivity from './AutomationActivity'
 type Source = { id: number; name: string; url: string; kind: string; enabled: boolean; status: string; last_success_at: string | null; last_error: string | null }
 type Preferences = { categories: string[]; country: 'ID'; education_level: string; include_unknown_eligibility: boolean; hide_closed: boolean; discovery_enabled: boolean }
 type Candidate = { name: string; url: string; kind: string; links_selector: string | null; note: string }
@@ -38,6 +39,7 @@ export default function Settings() {
   <div className="panel"><h2>Referensi sumber ({catalog.length})</h2><p className="muted">Daftar kandidat, bukan jaminan akun aktif atau collector berhasil. Tambahkan hanya yang ingin dipantau. CS-related Competitions menggunakan bentuk plural; nama singular dari permintaan lo juga disimpan sebagai kandidat.</p><div className="catalog">{catalog.map(item => <div key={item.url}><a href={safeLink(item.url)} target="_blank" rel="noreferrer">{item.name} ↗</a><small className="muted">{item.note}</small><button className="subtle" disabled={busy || sources.some(source => source.url === item.url)} onClick={() => void action(() => api('/sources', 'POST', { name: item.name, url: item.url, kind: item.kind, links_selector: item.links_selector }), 'Kandidat ditambahkan ke pantauan.')}>+ Pantau</button></div>)}</div></div>
   <div className="panel"><h2>Integrasi server</h2>{[['instagram', 'Instagram / Apify'], ['discovery', 'Discovery / Brave Search'], ['ocr', 'OCR / Tesseract']].map(([key, label]) => <p key={key}>{label}: <b>{integrations[key] ? 'Dikonfigurasi' : 'Belum terhubung'}</b></p>)}<p className="muted">Credential hanya disimpan di environment server. Provider dapat mengenakan biaya; tidak diaktifkan otomatis. Status dikonfigurasi belum menjamin credential valid atau kuota tersedia.</p></div>
   <AutomationSettings />
+  <AutomationActivity />
   <InstagramStatus />
   <DiscoveryStatus onChoose={item=>{setName(item.title);setUrl(item.url);setKind('website');window.scrollTo(0,0)}} />
   </section>
