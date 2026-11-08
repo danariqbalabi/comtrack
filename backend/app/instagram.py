@@ -164,6 +164,8 @@ def collect(queue,job_id,token,source):
                 context.finish(key,'ocr','failed');batch.errors.append('Poster gagal dibaca; caption tetap digunakan.')
         title=next((line for line in raw.splitlines() if re.search(r'hackathon|business (?:case|plan)|\bBCC\b|\bBPC\b',line,re.I)),raw.splitlines()[0] if raw else '')
         item=from_text(title,raw,post_url)
+        from .source_links import attach_caption
+        item=attach_caption(item)
         if item:
             if ocr_used:item.data.warnings.append('[Perlu review ekstraksi] Fakta poster Instagram perlu dicocokkan dengan gambar.')
             else:item.data.warnings.append('Informasi caption Instagram; poster belum dibaca.')

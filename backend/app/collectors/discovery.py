@@ -83,6 +83,8 @@ def collect(queue,job_id,token,source,*,client=None):
                     item = extractor.extract(page)
                 else:
                     item = parse_html(page)
+                from ..source_links import attach
+                item = attach(item,page)
                 entry.update(status='verified' if item else 'irrelevant',checked_at=datetime.now(timezone.utc).isoformat())
                 batch.activity['pages_verified']+=1
                 if item:

@@ -56,10 +56,13 @@ class Scheduler:
                     conn.execute('''INSERT INTO sources(name,kind,url,adapter,created_at,updated_at)
                         VALUES ('Discovery web','website','https://api.search.brave.com/','brave_discovery',?,?)''',(stamp,stamp))
             placeholders = ','.join('?' for _ in SCHEDULED_ADAPTERS)
-            sources = conn.execute(f'''SELECT * FROM sources WHERE enabled=1 AND kind IN ('website','rss','instagram')
-                AND adapter IN ({placeholders}) AND (? OR adapter!='brave_discovery')
-                ORDER BY CASE WHEN id>? THEN 0 ELSE 1 END,id LIMIT ?''',
-                (*SCHEDULED_ADAPTERS,preferences.discovery_enabled,schedule['last_source_id'],settings.max_sources_per_run)).fetchall()
+            sources = conn.execute(f'''SELECT s.* FROM sources s LEFT JOIN source_health h ON h.source_id=s.id
+                WHERE s.enabled=1 AND s.kind IN ('website','rss','instagram')
+                AND s.adapter IN ({placeholders}) AND (? OR s.adapter!='brave_discovery')
+                AND (h.next_check_at IS NULL OR julianday(h.next_check_at)<=julianday(?))
+                ORDER BY CASE WHEN h.last_attempt_at IS NULL THEN 0 ELSE 1 END,h.last_attempt_at,h.score DESC,
+                CASE WHEN s.id>? THEN 0 ELSE 1 END,s.id LIMIT ?''',
+                (*SCHEDULED_ADAPTERS,preferences.discovery_enabled,stamp,schedule['last_source_id'],settings.max_sources_per_run)).fetchall()
             next_at = (now + timedelta(minutes=settings.interval_minutes)).isoformat(timespec='microseconds')
             if not sources:
                 return outcome('no_sources',next_at=next_at)

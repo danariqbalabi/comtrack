@@ -186,6 +186,8 @@ class JobQueue:
             self.assert_lease(conn,job_id,token)
             # Refresh nullable FK after a source was removed during an in-flight request.
             current=conn.execute("SELECT * FROM collection_job_sources WHERE id=?", (source["id"],)).fetchone()
+            if current['status'] in ('succeeded','failed','skipped'):
+                return  # Duplicate completion must not overwrite results or count productivity twice.
             status="skipped" if skipped else "failed" if error else "succeeded"
             conn.execute("UPDATE collection_job_sources SET status=?,finished_at=?,error=?,result_json=? WHERE id=?",
                          (status,utc_now(),error,encode(result or {}),source["id"]))
@@ -194,6 +196,8 @@ class JobQueue:
                 conn.execute("""UPDATE sources SET status=?,last_checked_at=?,updated_at=?,last_error=?,
                     last_success_at=CASE WHEN ? IS NULL THEN ? ELSE last_success_at END WHERE id=?""",
                     (source_status,utc_now(),utc_now(),error,error,utc_now(),current["source_id"]))
+                from .source_health import record
+                record(conn,current,result,error)
             message = "Sumber berhasil diproses dan disimpan."
             if result is not None and result.get("competitions") == []:
                 message = "Sumber dibaca; tidak ada kandidat lomba untuk disimpan."

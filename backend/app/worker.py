@@ -124,6 +124,11 @@ def execute_job(queue: JobQueue, job_id: int, token: str, *, client=None, adapte
                 for item in batch.items:
                     if shutdown.is_set():
                         break
+                    if source_client is not None and automatic:
+                        page=next((page for page in source_client.pages if page.url==str(item.data.source_url)),None)
+                        if page is not None:
+                            from .source_links import attach
+                            item=attach(item,page)
                     evidence = EvidenceData(source_id=source["source_id"], url=item.data.source_url,
                                             content_hash=item.content_hash, raw_text=item.raw_text,
                                             field_values=item.field_values, fetched_at=datetime.now(timezone.utc))

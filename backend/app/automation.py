@@ -70,6 +70,7 @@ class AutomationStore:
             elif settings.interval_minutes != previous.interval_minutes:
                 next_at = (datetime.now(timezone.utc)+timedelta(minutes=settings.interval_minutes)).isoformat(timespec='microseconds')
                 conn.execute("UPDATE automation_schedule SET next_run_at=?,last_status='waiting' WHERE singleton=1",(next_at,))
+                conn.execute('UPDATE source_health SET next_check_at=NULL WHERE consecutive_failures=0')
             return self.snapshot(conn.execute('SELECT * FROM automation_settings WHERE singleton=1').fetchone())
 
     def schedule(self):

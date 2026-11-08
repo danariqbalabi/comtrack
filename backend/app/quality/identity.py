@@ -37,7 +37,8 @@ def same_competition(left: CompetitionData, right: CompetitionData) -> bool:
     official = left.official_url and right.official_url and canonical_url(left.official_url) == canonical_url(right.official_url)
     organizer = left.organizer and right.organizer and normalize(left.organizer) == normalize(right.organizer)
     same_page = canonical_url(left.source_url) == canonical_url(right.source_url)
-    return bool(official or organizer or same_page)
+    shared_registration = left.registration_url and right.registration_url and urlsplit(str(left.registration_url)).path.rstrip('/') and canonical_url(left.registration_url)==canonical_url(right.registration_url)
+    return bool(official or organizer or same_page or shared_registration)
 
 
 def storage_key(data: CompetitionData) -> str:
