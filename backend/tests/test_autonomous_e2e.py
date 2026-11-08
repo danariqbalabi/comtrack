@@ -26,7 +26,7 @@ class AutonomousEndToEndTests(unittest.TestCase):
     def setUp(self):
         helpers.DiscoveryAutomationTests.setUp(self)
         helpers.DiscoveryAutomationTests.setup_discovery(self)
-        self.config=Settings(_env_file=None,discovery_provider_enabled=True,brave_api_key='fixture-brave',brave_cost_per_request_usd='0.001',
+        self.config=Settings(_env_file=None,discovery_provider_enabled=True,discovery_provider='brave',brave_api_key='fixture-brave',brave_cost_per_request_usd='0.001',
             instagram_provider_enabled=True,apify_token='fixture-apify',apify_max_charge_usd=.01)
         self.client.get.side_effect=lambda url:Page(url,HTML,'text/html')
         self.calls={'brave':0,'profiles':0,'posts':0}

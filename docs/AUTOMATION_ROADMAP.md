@@ -2,7 +2,7 @@
 
 Disepakati 8 November 2026. Dokumen ini adalah rencana; fitur yang tercantum belum otomatis dianggap tersedia.
 
-Status: tahap 1-9 sudah diimplementasikan dan diuji bertahap. Discovery membentuk query, memverifikasi artikel asli, dan mendaftarkan artikel/akun publik media lomba yang lolos kualifikasi dalam jatah sumber baru. AI lokal/OCR opsional berbasis kutipan, jadwal/backoff persisten, deduplikasi bukti, riwayat perubahan, dan panel aktivitas tersedia. Pencarian manual dan otomatis berbagi kuota provider harian. Integrasi Brave/Apify/Ollama/OCR menggunakan fixture karena credential/runtime belum tersedia; fallback website OU Festival dan server produksi terisolasi diuji nyata. Layanan berbayar, model, otomatisasi lokal, dan deployment tidak diaktifkan otomatis. Lihat README dan docs/AUTOMATION_OPERATIONS.md untuk setup, batas cakupan, dan hasil verifikasi.
+Status: tahap 1-9 sudah diimplementasikan dan diuji bertahap. Discovery membentuk query, memverifikasi artikel asli, dan mendaftarkan artikel/akun publik media lomba yang lolos kualifikasi dalam jatah sumber baru. AI lokal/OCR opsional berbasis kutipan, jadwal/backoff persisten, deduplikasi bukti, riwayat perubahan, dan panel aktivitas tersedia. Pencarian manual dan otomatis berbagi kuota provider harian. Integrasi Tavily/Brave/Apify/Ollama/OCR menggunakan fixture karena credential/runtime belum tersedia; fallback website OU Festival dan server produksi terisolasi diuji nyata. Layanan berbayar, model, otomatisasi lokal, dan deployment tidak diaktifkan otomatis. Lihat README dan docs/AUTOMATION_OPERATIONS.md untuk setup, batas cakupan, dan hasil verifikasi.
 
 ## Tujuan dan batas cakupan
 
@@ -53,3 +53,5 @@ Ada perubahan lokal pekerjaan perluasan website sebelumnya pada collector, penga
 ## Ukuran keberhasilan
 
 Utamakan jumlah lomba relevan yang terbukti, ketepatan tanggal/biaya, duplikasi rendah, cakupan sumber, dan waktu informasi ditemukan. Jumlah halaman yang diambil bukan satu-satunya ukuran. Jangan menjanjikan seluruh web/sosmed dapat dibaca, seluruh temuan selalu benar, atau skala besar sepenuhnya gratis.
+
+Penyesuaian untuk pribadi: Tavily Free menjadi default discovery, Basic Search saja, jatah awal 20/hari dan 600/bulan UTC. Izin/budget berbayar tidak diperlukan untuk Tavily; ledger lama tetap utuh. Lihat README untuk konfigurasi baru.

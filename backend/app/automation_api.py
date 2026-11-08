@@ -24,15 +24,18 @@ def present(snapshot, schedule):
         return {'configured':configured, 'automation_allowed':allowed}
     heartbeat = schedule['last_tick_at']
     fresh = bool(heartbeat and (datetime.now(timezone.utc)-datetime.fromisoformat(heartbeat)).total_seconds() <= max(30,config.scheduler_poll_seconds*3))
+    tavily=config.discovery_provider=='tavily'
+    discovery_ready=config.discovery_provider_enabled and bool((config.tavily_api_key if tavily else config.brave_api_key).get_secret_value())
     return {**snapshot, 'runtime':{
         'stage':9, 'scheduler_available':True, 'scheduler_online':fresh, 'running':settings.enabled and fresh,
         'state':('waiting_scheduler' if not fresh else schedule['last_status']) if settings.enabled else 'disabled',
         'limits_enforced':True, 'enforced_limits':['max_sources_per_run','max_new_sources_per_run','max_pages_per_source','max_images_per_post','provider_daily_request_limit','provider_daily_budget_usd'],
         'next_run_at':schedule['next_run_at'], 'last_tick_at':heartbeat,
         'last_enqueued_at':schedule['last_enqueued_at'], 'last_job_id':schedule['last_job_id'],
-        'message':'Scheduler memantau website/RSS dan dapat mencari kandidat lewat discovery jika preferensi, provider, izin biaya dan kuota siap. Artikel website yang lolos kualifikasi menjadi pantauan dalam batas sumber baru. AI lokal/OCR opsional membantu artikel yang belum lengkap. Instagram hanya untuk profil publik yang lolos klasifikasi bio. Pencarian manual berbagi kuota harian provider dan tetap dapat dijalankan saat otomatisasi dijeda.',
+        'message':'Scheduler memantau website/RSS dan dapat mencari kandidat lewat discovery jika preferensi, provider dan kuota siap. Tavily Free memakai kredit harian/bulanan tanpa izin berbayar. Artikel website yang lolos kualifikasi menjadi pantauan dalam batas sumber baru. AI lokal/OCR opsional membantu artikel yang belum lengkap. Instagram hanya untuk profil publik yang lolos klasifikasi bio. Pencarian manual berbagi kuota harian provider dan tetap dapat dijalankan saat otomatisasi dijeda.',
         'providers':{
-            'discovery':provider(config.discovery_provider_enabled, config.brave_api_key,discovery=True),
+            'discovery':{'configured':discovery_ready,'provider':config.discovery_provider,
+                'automation_allowed':discovery_ready and (settings.tavily_free_enabled if tavily else settings.allow_paid_providers and config.brave_cost_per_request_usd is not None)},
             'instagram':provider(config.instagram_provider_enabled, config.apify_token),
             'ocr':{'configured':config.ocr_enabled and shutil.which(config.tesseract_command) is not None},
             'ai':{'configured':config.ai_enabled and bool(config.ai_model),'provider':'ollama_local'},

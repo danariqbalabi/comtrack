@@ -17,6 +17,9 @@ class AutomationSettings(Model):
     max_new_sources_per_run: int = Field(default=3, strict=True, ge=0, le=30)
     max_pages_per_source: int = Field(default=5, strict=True, ge=1, le=10)
     max_images_per_post: int = Field(default=3, strict=True, ge=0, le=5)
+    tavily_free_enabled: StrictBool = True
+    tavily_daily_credit_limit: int = Field(default=20, strict=True, ge=0, le=1000)
+    tavily_monthly_credit_limit: int = Field(default=600, strict=True, ge=0, le=1000)
     allow_paid_providers: StrictBool = False
     provider_daily_request_limit: int = Field(default=0, strict=True, ge=0, le=10000)
     provider_daily_budget_usd: Decimal = Field(default=Decimal('0.00'), ge=0, le=1000, decimal_places=2, allow_inf_nan=False)

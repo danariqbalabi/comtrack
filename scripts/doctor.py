@@ -12,7 +12,8 @@ def inspect():
     config=get_settings();db=Database(config.resolved_database_path)
     report={'database':{'exists':db.path.exists()},'frontend_built':(ROOT/'frontend/dist/index.html').is_file(),
         'production_auth_configured':bool(config.access_username and len(config.access_password.get_secret_value())>=16),
-        'providers':{'brave_configured':bool(config.discovery_provider_enabled and config.brave_api_key.get_secret_value() and config.brave_cost_per_request_usd),
+        'providers':{'discovery_provider':config.discovery_provider,'tavily_configured':bool(config.discovery_provider_enabled and config.tavily_api_key.get_secret_value()),
+            'brave_configured':bool(config.discovery_provider_enabled and config.brave_api_key.get_secret_value() and config.brave_cost_per_request_usd),
             'instagram_configured':bool(config.instagram_provider_enabled and config.apify_token.get_secret_value()),
             'ocr_configured':bool(config.ocr_enabled and shutil.which(config.tesseract_command)),
             'ai_configured':bool(config.ai_enabled and config.ai_model)},
@@ -23,6 +24,7 @@ def inspect():
             state=AutomationStore(db).get()
             report['automation']={'enabled':state['settings'].enabled,'paid_allowed':state['settings'].allow_paid_providers,
                 'daily_requests':state['settings'].provider_daily_request_limit,'daily_usd':str(state['settings'].provider_daily_budget_usd),
+                'tavily_free_enabled':state['settings'].tavily_free_enabled,'tavily_daily_limit':state['settings'].tavily_daily_credit_limit,'tavily_monthly_limit':state['settings'].tavily_monthly_credit_limit,
                 'schedule':AutomationStore(db).schedule()}
             with db.connection() as conn:
                 report['database']['foreign_key_errors']=len(conn.execute('PRAGMA foreign_key_check').fetchall())

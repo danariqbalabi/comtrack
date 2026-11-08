@@ -19,6 +19,7 @@ def summary(repository):
     settings = AutomationStore(repository.database).get()['settings']
     preferences = repository.get_preferences()
     day = datetime.now(timezone.utc).date().isoformat()
+    tavily=config.discovery_provider=='tavily'
     with repository.database.connection() as conn:
         from .provider_budget import daily_usage
         count,amount = daily_usage(conn,day)
@@ -28,6 +29,9 @@ def summary(repository):
         domains = conn.execute('SELECT count(DISTINCT domain) FROM discovery_candidates WHERE domain IS NOT NULL').fetchone()[0]
         source = conn.execute("SELECT enabled FROM sources WHERE kind='website' AND url='https://api.search.brave.com/'").fetchone()
         source_count = conn.execute('SELECT count(*) FROM sources').fetchone()[0]
+        from .tavily_budget import usage
+        free_usage=usage(conn)
+        safety_blocked=bool(conn.execute('SELECT blocked FROM tavily_safety WHERE singleton=1').fetchone()[0])
     state = 'ready'
     if not preferences.discovery_enabled:
         state='disabled'
@@ -37,15 +41,20 @@ def summary(repository):
         state='source_disabled'
     elif source is None and source_count>=30:
         state='source_limit'
-    elif not config.discovery_provider_enabled or not config.brave_api_key.get_secret_value():
+    elif not config.discovery_provider_enabled or not (config.tavily_api_key if tavily else config.brave_api_key).get_secret_value():
         state='not_connected'
+    elif tavily:
+        if safety_blocked:state='contract_changed'
+        elif not settings.tavily_free_enabled:state='free_disabled'
+        elif free_usage['daily_reserved']>=settings.tavily_daily_credit_limit or free_usage['monthly_reserved']>=settings.tavily_monthly_credit_limit:state='free_budget_exhausted'
     elif config.brave_cost_per_request_usd is None:
         state='estimate_missing'
     elif not settings.allow_paid_providers:
         state='paid_not_allowed'
     elif count>=settings.provider_daily_request_limit or Decimal(amount)+config.brave_cost_per_request_usd*MICRO_USD>settings.provider_daily_budget_usd*MICRO_USD:
         state='budget_exhausted'
-    return {'state':state,'candidates':total,'domains':domains,
+    return {'state':state,'provider':config.discovery_provider,'candidates':total,'domains':domains,
+        'free_budget':{**free_usage,'enabled':settings.tavily_free_enabled,'daily_limit':settings.tavily_daily_credit_limit,'monthly_limit':settings.tavily_monthly_credit_limit,'safety_blocked':safety_blocked},
         'budget':{'day_utc':day,'requests_reserved':count,'request_limit':settings.provider_daily_request_limit,
                   'estimated_usd_reserved':str(Decimal(amount)/MICRO_USD),'daily_limit_usd':str(settings.provider_daily_budget_usd),
                   'estimated_usd_per_request':str(config.brave_cost_per_request_usd) if config.brave_cost_per_request_usd is not None else None},

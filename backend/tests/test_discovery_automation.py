@@ -43,7 +43,7 @@ class DiscoveryAutomationTests(unittest.TestCase):
         _,token=self.queue.claim()
         self.job_id,self.token,self.discovery_source=job_id,token,source
         self.context=DiscoveryContext(self.queue,job_id,token,source)
-        self.config=Settings(_env_file=None,discovery_provider_enabled=True,brave_api_key='fixture-secret-key',brave_cost_per_request_usd='0.001')
+        self.config=Settings(_env_file=None,discovery_provider_enabled=True,discovery_provider='brave',brave_api_key='fixture-secret-key',brave_cost_per_request_usd='0.001')
         self.client=Mock();self.client.get.side_effect=lambda url: Page(url,HTML,'text/html')
 
     def collect(self,hits=None):
@@ -99,7 +99,7 @@ class DiscoveryAutomationTests(unittest.TestCase):
 
     def test_missing_credentials_or_estimate_never_call_search(self):
         self.setup_discovery()
-        for config in (Settings(_env_file=None),Settings(_env_file=None,discovery_provider_enabled=True,brave_api_key='fixture')):
+        for config in (Settings(_env_file=None),Settings(_env_file=None,discovery_provider_enabled=True,discovery_provider='brave',brave_api_key='fixture')):
             with patch.object(collector,'get_settings',return_value=config),patch.object(collector.providers,'request_json') as search:
                 with self.assertRaises(ValueError):collector.collect(self.queue,self.job_id,self.token,self.discovery_source)
                 search.assert_not_called()
@@ -230,7 +230,7 @@ class DiscoveryAutomationTests(unittest.TestCase):
         path=Path(self.temp.name)/'old.db';old=Database(path,directory);old.migrate()
         with old.transaction() as conn:
             conn.execute("INSERT INTO discovery_candidates(url,title,status,first_seen_at,last_seen_at) VALUES ('https://example.com/old','Old','unverified','2030-01-01','2030-01-01')")
-        upgraded=Database(path);self.assertEqual(upgraded.migrate(),['006','007','008','009','010','011'])
+        upgraded=Database(path);self.assertEqual(upgraded.migrate(),['006','007','008','009','010','011','012'])
         with upgraded.connection() as conn:self.assertEqual(conn.execute('SELECT title FROM discovery_candidates').fetchone()[0],'Old')
 
     def test_blank_estimate_is_unconfigured_and_invalid_precision_rejected(self):

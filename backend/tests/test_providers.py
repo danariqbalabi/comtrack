@@ -31,7 +31,7 @@ class ProviderTests(unittest.TestCase):
         self.assertIn('maxTotalChargeUsd=0.05', request.call_args.args[1])
 
     def test_discovery_verifies_details_and_keeps_candidates_separate(self):
-        settings = Settings(_env_file=None, discovery_provider_enabled=True, brave_api_key='fixture')
+        settings = Settings(_env_file=None, discovery_provider_enabled=True, discovery_provider='brave',brave_api_key='fixture')
         hits = {'web': {'results': [{'title': 'Business Plan', 'url': 'https://example.com/detail'}]}}
         client = Mock(); client.get.return_value = Page('https://example.com/detail', HTML, 'text/html')
         with patch.object(providers, 'get_settings', return_value=settings), patch.object(providers, 'request_json', return_value=hits), patch.object(providers, 'client_for', return_value=client), patch.object(providers.time, 'sleep'):

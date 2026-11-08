@@ -20,7 +20,7 @@ class DoctorTests(unittest.TestCase):
     def test_readiness_report_does_not_leak_credentials_or_activate_automation(self):
         with tempfile.TemporaryDirectory() as folder:
             path=Path(folder)/'radar.db';Database(path).migrate()
-            config=Settings(_env_file=None,database_path=path,brave_api_key='fixture-private-brave',apify_token='fixture-private-apify',access_password='fixture-private-password')
+            config=Settings(_env_file=None,database_path=path,discovery_provider='brave',brave_api_key='fixture-private-brave',apify_token='fixture-private-apify',access_password='fixture-private-password')
             with patch.object(doctor,'get_settings',return_value=config):report=doctor.inspect()
             self.assertFalse(report['automation']['enabled'])
             self.assertFalse(report['automation']['paid_allowed'])

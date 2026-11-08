@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 from decimal import Decimal
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, SecretStr, field_validator
@@ -23,6 +24,8 @@ class Settings(BaseSettings):
     scheduler_poll_seconds: float = Field(default=5, ge=1, le=30)
     brave_api_key: SecretStr = SecretStr("")
     discovery_provider_enabled: bool = False
+    discovery_provider: Literal['tavily','brave'] = 'tavily'
+    tavily_api_key: SecretStr = SecretStr('')
     brave_cost_per_request_usd: Decimal | None = Field(default=None,gt=0,le=10,decimal_places=6,allow_inf_nan=False)
 
     apify_token: SecretStr = SecretStr("")

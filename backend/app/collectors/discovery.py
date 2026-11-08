@@ -19,7 +19,21 @@ class DiscoveryBatch(Batch):
     activity: dict = field(default_factory=lambda:{'queries_requested':0,'queries_reused':0,'candidates':0,'rejected_urls':0,'pages_verified':0})
 
 
+class TavilyContractError(ValueError):
+    pass
+
+
 def search(query,config):
+    if config.discovery_provider=='tavily':
+        response=providers.request_json('api.tavily.com','/search',token=config.tavily_api_key.get_secret_value(),payload={
+            'query':query,'search_depth':'basic','auto_parameters':False,'topic':'general','country':'indonesia',
+            'max_results':5,'include_answer':False,'include_raw_content':False,'include_images':False,'include_usage':True})
+        if not isinstance(response,dict) or not isinstance(response.get('results'),list):
+            raise ValueError('Format respons Tavily tidak valid.')
+        reported=response.get('usage',{}).get('credits') if isinstance(response.get('usage',{}),dict) else None
+        if type(reported) not in (int,float) or reported!=1:
+            raise TavilyContractError('Pemakaian kredit Tavily berbeda dari Basic Search; pencarian dihentikan.')
+        return [{'url':hit.get('url'),'title':str(hit.get('title',''))[:300]} for hit in response['results'][:5] if isinstance(hit,dict)]
     response = providers.request_json('api.search.brave.com','/res/v1/web/search?'+urlencode({
         'q':query,'country':'ID','search_lang':'id','count':5,'result_filter':'web','text_decorations':'false','safesearch':'strict'}),
         token=config.brave_api_key.get_secret_value(),brave=True)
@@ -30,29 +44,34 @@ def search(query,config):
 
 def collect(queue,job_id,token,source,*,client=None):
     config = get_settings()
-    if not config.discovery_provider_enabled or not config.brave_api_key.get_secret_value():
-        raise providers.ProviderUnavailable('Discovery belum terhubung: atur BRAVE_API_KEY dan DISCOVERY_PROVIDER_ENABLED di server.')
-    if config.brave_cost_per_request_usd is None:
+    tavily=config.discovery_provider=='tavily'
+    key=config.tavily_api_key if tavily else config.brave_api_key
+    if not config.discovery_provider_enabled or not key.get_secret_value():
+        raise providers.ProviderUnavailable('Discovery belum terhubung: atur '+('TAVILY_API_KEY' if tavily else 'BRAVE_API_KEY')+' dan DISCOVERY_PROVIDER_ENABLED di server.')
+    if not tavily and config.brave_cost_per_request_usd is None:
         raise DiscoveryBlocked('Isi BRAVE_COST_PER_REQUEST_USD sesuai estimasi tarif akun sebelum discovery otomatis.')
     context = DiscoveryContext(queue,job_id,token,source)
+    from .. import tavily_budget
+    tavily_budget.pin(context,config.discovery_provider)
     extractor = ExtractionContext(queue,job_id,token,source)
     automatic = queue.automation_settings(job_id) is not None
     batch,seen = DiscoveryBatch(),set()
     for index,query in enumerate(context.queries):
         try:
-            hits = context.reserve(index,query,config.brave_cost_per_request_usd)
+            hits = tavily_budget.reserve(context,index,query) if tavily else context.reserve(index,query,config.brave_cost_per_request_usd)
         except DiscoveryBlocked as error:
             batch.errors.append(str(error)); break
         if hits is None:
             if index:
                 time.sleep(1.1)
-            context.authorize_request()
+            tavily_budget.authorize(context) if tavily else context.authorize_request()
             try:
                 hits = search(query,config)
-            except ValueError:
-                context.finish_request(index)
+            except ValueError as error:
+                if isinstance(error,TavilyContractError):tavily_budget.block(context)
+                tavily_budget.finish(context,index) if tavily else context.finish_request(index)
                 batch.errors.append('Search provider gagal/menolak request; cek key dan kuota. Request tidak dicoba ulang otomatis.'); break
-            context.finish_request(index,hits)
+            tavily_budget.finish(context,index,hits) if tavily else context.finish_request(index,hits)
             batch.activity['queries_requested']+=1
         else:
             batch.activity['queries_reused']+=1

@@ -53,7 +53,7 @@ Membaca endpoint/panel tidak melakukan pencarian atau menulis observasi. Di prod
 
 ## Diagnostik dan pemulihan
 
-1. Jalankan `python -m scripts.doctor` menggunakan venv. Periksa schema **011**, integritas DB, build frontend, enabled/paid allowance, dan heartbeat. Perintah ini tidak memanggil layanan atau menampilkan secret.
+1. Jalankan `python -m scripts.doctor` menggunakan venv. Periksa schema **012**, integritas DB, build frontend, enabled/paid allowance, dan heartbeat. Perintah ini tidak memanggil layanan atau menampilkan secret.
 2. Job tetap antre: pastikan worker menggunakan `DATABASE_PATH` yang sama. Jadwal tidak bergerak: pastikan scheduler hidup dan otomatisasi aktif. Browser tidak menjalankan scheduler.
 3. Provider belum terhubung: isi flag/key, tarif Brave atau cap Apify, restart proses, lalu periksa izin/kuota pada Pengaturan. Untuk percobaan ulang eksplisit gunakan Cari sekarang; request gagal/tidak pasti pada job lama tidak dikirim ulang.
 4. Halaman tidak terbaca: cek error sumber dan selector, robots/login/JS/PDF. Menambah batas halaman tidak menyelesaikan struktur yang belum didukung. AI/OCR dapat membantu konten, bukan melewati kontrol akses.
@@ -64,6 +64,14 @@ Membaca endpoint/panel tidak melakukan pencarian atau menulis observasi. Di prod
 
 Compose menyediakan API, worker, scheduler, volume SQLite dan OCR. AI lokal tidak dibundel; endpoint loopback membutuhkan Ollama dalam lingkungan jaringan worker yang sama. Konfigurasi default Compose belum membuat runtime/model Ollama. Jangan menganggap Ollama di host Windows otomatis terjangkau dari loopback container.
 
-Hasil akhir: 264 tes backend, build frontend dan pip check lulus. Pengujian menggunakan database sementara, tanpa seeding produksi: pipeline discovery sampai feed lintas sumber, recovery setelah ingest, permission/budget manual/otomatis, source disable/pause, cache dan quote validation, migrasi, API autentikasi serta guard mutasi. `scripts.system_smoke` menjalankan API production HTTP nyata dan frontend build dengan credential fixture, lalu menghentikan proses miliknya. `scripts.scheduler_smoke` dan `scripts.discovery_smoke` menguji website OU Festival nyata dengan provider berbayar dipaksa nonaktif. Hasil lokal ada di `data/` dan tidak ikut Git.
+Hasil akhir: 282 tes backend, build frontend dan pip check lulus. Pengujian menggunakan database sementara, tanpa seeding produksi: pipeline discovery sampai feed lintas sumber, recovery setelah ingest, permission/budget manual/otomatis, source disable/pause, cache dan quote validation, migrasi, API autentikasi serta guard mutasi. `scripts.system_smoke` menjalankan API production HTTP nyata dan frontend build dengan credential fixture, lalu menghentikan proses miliknya. `scripts.scheduler_smoke` dan `scripts.discovery_smoke` menguji website OU Festival nyata dengan provider berbayar dipaksa nonaktif. Hasil lokal ada di `data/` dan tidak ikut Git.
 
-Brave/Apify live, model/OCR live, visual browser terbaru dan Docker build belum diuji karena credential/runtime/tool tidak tersedia. Jangan menganggap mock provider sebagai bukti koneksi live. Otomatisasi lokal/provider tetap tidak diaktifkan oleh tes.
+Tavily/Brave/Apify live, model/OCR live, visual browser terbaru dan Docker build belum diuji karena credential/runtime/tool tidak tersedia. Jangan menganggap mock provider sebagai bukti koneksi live. Otomatisasi lokal/provider tetap tidak diaktifkan oleh tes.
+
+## Tavily Free sebagai default
+
+Discovery default sekarang Tavily Basic Search: env `DISCOVERY_PROVIDER=tavily`, `TAVILY_API_KEY`, flag discovery aktif. Tidak memerlukan izin berbayar/anggaran USD. Kontrol `tavily_free_enabled` default true, `tavily_daily_credit_limit` default 20, `tavily_monthly_credit_limit` default 600; batas 0 menghentikan request baru, maksimal 1000/bulan. Kuota tersendiri di luar ledger USD Brave/Apify. UI Discovery/aktivitas menampilkan reservasi kredit lokal, bukan saldo akun provider.
+
+Schema 012 mempertahankan ledger lama dan menambahkan reservasi satu kredit/query Basic. Hari/bulan UTC, guard lease/jeda, batas lebih ketat dari snapshot/terkini, tanpa refund saat gagal/crash, cache sukses per query/job. Pin provider mencegah pemulihan job berganti provider dan mengirim ulang pencarian ke layanan lain. Basic dipaksa, auto_parameters dan answer/raw/images dimatikan; respons usage selain 1/tidak tersedia menahan integrasi melalui tavily_safety.blocked. Periksa kontrak/tarif dan perbaiki adapter sebelum mereset flag tersebut; jangan menghapus ledger untuk melewati jatah. Brave tetap opt-in eksplisit; adapter internal brave_discovery dan URL sumber sistem lama dipertahankan demi kompatibilitas data, bukan penanda tujuan request HTTP (Tavily memakai api.tavily.com/search).
+
+Free plan akun harus tetap Researcher, PAYG nonaktif; tidak ada kontrol billing akun melalui aplikasi ini. Kredit yang digunakan aplikasi lain tidak tercatat. Instagram masih memerlukan provider terpisah. Panduan langkah demi langkah terbaru ada pada README.

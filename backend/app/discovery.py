@@ -80,6 +80,8 @@ class DiscoveryContext:
     def reserve(self,index,query,cost,*,now=None):
         if index<0 or index>=len(self.queries) or self.queries[index]!=query:
             raise ValueError('Query harus sesuai rencana tersimpan.')
+        from .tavily_budget import pin
+        pin(self,'brave')
         now = now or datetime.now(timezone.utc)
         day = now.astimezone(timezone.utc).date().isoformat()
         with self.queue.database.transaction() as conn:

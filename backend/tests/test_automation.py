@@ -93,7 +93,7 @@ class AutomationTests(unittest.TestCase):
 
     def test_readiness_reports_only_configuration_without_disclosing_secrets(self):
         settings = Settings(_env_file=None, instagram_provider_enabled=True, apify_token='fixture-private-token',
-                            discovery_provider_enabled=True, brave_api_key='fixture-private-search')
+                            discovery_provider_enabled=True, discovery_provider='brave',brave_api_key='fixture-private-search')
         with patch('backend.app.automation_api.get_settings', return_value=settings), \
              patch('backend.app.collectors.providers.request_json', side_effect=AssertionError('Readiness called provider')):
             body = self.read()
@@ -151,7 +151,7 @@ class AutomationTests(unittest.TestCase):
         repo.save_preferences(preferences)
         saved = repo.create_competition(self.adapter.return_value.data)
         upgraded = Database(path)
-        self.assertEqual(upgraded.migrate(),['004','005','006','007','008','009','010','011'])
+        self.assertEqual(upgraded.migrate(),['004','005','006','007','008','009','010','011','012'])
         self.assertEqual(Repository(upgraded).get_preferences(),preferences)
         self.assertEqual(Repository(upgraded).get_competition(saved.id),saved)
         store = AutomationStore(upgraded)

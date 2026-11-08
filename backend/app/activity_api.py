@@ -17,6 +17,8 @@ def activity_summary(repository):
     day=datetime.now(timezone.utc).date().isoformat()
     with repository.database.connection() as conn:
         requests,amount=daily_usage(conn,day)
+        from .tavily_budget import usage
+        free_usage=usage(conn)
         budgets=[dict(row) for row in conn.execute('''SELECT provider,count(*) requests,sum(reserved_microusd) reserved_microusd FROM (
             SELECT provider,reserved_microusd FROM provider_request_reservations WHERE day_utc=? UNION ALL
             SELECT provider,reserved_microusd FROM paid_provider_requests WHERE day_utc=?) GROUP BY provider''',(day,day))]
@@ -31,7 +33,7 @@ def activity_summary(repository):
         counts={key:sum(item.get('outcome')==key for item in results) for key in ('created','updated','unchanged')}
         counts.update({key:sum(item.get('relevance_status')==key for item in results) for key in ('relevant','needs_review','excluded')})
         source_counts={row['status']:row['count'] for row in conn.execute('SELECT status,count(*) count FROM sources GROUP BY status')}
-    return {'day_utc':day,'budget':{'requests_reserved':requests,'estimated_usd_reserved':str(Decimal(amount)/1000000),'by_provider':budgets},
+    return {'day_utc':day,'tavily_free':free_usage,'budget':{'requests_reserved':requests,'estimated_usd_reserved':str(Decimal(amount)/1000000),'by_provider':budgets},
         'website_candidates':candidates,'instagram_candidates':accounts,'extraction':extraction,'source_statuses':source_counts,
         'last_job':{**dict(last),'counts':counts} if last else None}
 

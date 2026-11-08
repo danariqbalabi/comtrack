@@ -25,7 +25,7 @@ def integrations():
     from .config import get_settings
     settings = get_settings()
     return {"instagram": settings.instagram_provider_enabled and bool(settings.apify_token.get_secret_value()),
-            "discovery": settings.discovery_provider_enabled and bool(settings.brave_api_key.get_secret_value()),
+            "discovery": settings.discovery_provider_enabled and bool((settings.tavily_api_key if settings.discovery_provider=='tavily' else settings.brave_api_key).get_secret_value()),
             "ocr": settings.ocr_enabled and shutil.which(settings.tesseract_command) is not None}
 
 
